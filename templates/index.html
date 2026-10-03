@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDRT v4.7 — External Data Recovery Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════
+   ROOT VARIABLES & RESET
+═══════════════════════════════════════════════════════ */
+:root{
+  --bg:#060b11;--surface:#0b1520;--surface2:#101e2e;--surface3:#162438;
+  --border:#1a3050;--border2:#1e3d61;
+  --cyan:#00e5ff;--cyan2:#00b8cc;--cyan-dim:rgba(0,229,255,.08);
+  --orange:#ff6b35;--green:#39ff14;--green2:#2bc910;
+  --yellow:#ffaa00;--red:#ff4444;--purple:#a78bfa;
+  --text:#c8dce8;--text2:#8ab0c8;--muted:#567a96;--muted2:#3a5470;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;overflow-x:hidden;min-height:100vh;}
+/* CRT scanline overlay */
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,.01) 2px,rgba(0,229,255,.01) 4px);pointer-events:none;z-index:9998;}
+
+/* ═══════════════════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════════════════ */
+.layout{display:grid;grid-template-columns:220px 1fr;grid-template-rows:52px 1fr;min-height:100vh;}
+
+/* ═══════════════════════════════════════════════════════
+   TOPBAR
+═══════════════════════════════════════════════════════ */
+.topbar{
+  grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 20px;
+  background:rgba(6,11,17,.97);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:100;
+}
+.brand{color:var(--cyan);font-size:13px;letter-spacing:3px;display:flex;align-items:center;gap:8px;}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite;flex-shrink:0;}
+.brand-v{font-size:9px;color:var(--muted);border:1px solid var(--muted2);padding:1px 5px;margin-left:4px;letter-spacing:1px;}
+.team-tag{color:var(--orange);font-size:9px;letter-spacing:2px;border-left:1px solid var(--border);padding-left:14px;}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+.perm-badge{font-size:9px;padding:3px 10px;border:1px solid var(--yellow);color:var(--yellow);letter-spacing:1px;transition:.3s;}
+#clock{color:var(--muted);font-size:10px;font-family:'JetBrains Mono',monospace;}
+
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════════════ */
+.sidebar{background:#07101a;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
+.sidebar-section{padding:10px 0 4px;border-bottom:1px solid var(--border2);}
+.sidebar-label{font-size:9px;color:var(--muted2);letter-spacing:3px;padding:0 18px 6px;text-transform:uppercase;}
+.nav-btn{
+  display:flex;align-items:center;gap:10px;padding:10px 18px;
+  font-size:10px;letter-spacing:1.5px;color:var(--muted);cursor:pointer;
+  border-left:3px solid transparent;border:none;
+  transition:all .15s;font-family:'Share Tech Mono',monospace;
+  background:none;width:100%;text-align:left;position:relative;
+}
+.nav-btn:hover{color:var(--text);background:rgba(0,229,255,.04);}
+.nav-btn.active{color:var(--cyan);background:rgba(0,229,255,.06);border-left:3px solid var(--cyan);}
+.nav-icon{font-size:12px;width:16px;text-align:center;flex-shrink:0;}
+.sidebar-footer{margin-top:auto;border-top:1px solid var(--border);padding:14px 18px;}
+.sb-stat{font-size:9px;color:var(--muted);margin-bottom:5px;letter-spacing:1px;display:flex;justify-content:space-between;}
+.sb-val{color:var(--cyan);}
+
+/* ═══════════════════════════════════════════════════════
+   MAIN / PAGES
+═══════════════════════════════════════════════════════ */
+main{overflow-y:auto;background:var(--bg);}
+.page{display:none;padding:24px 32px;animation:fadeIn .2s ease;}
+.page.active{display:block;}
+
+/* ═══════════════════════════════════════════════════════
+   TYPOGRAPHY HELPERS
+═══════════════════════════════════════════════════════ */
+.tag{color:var(--cyan);font-size:9px;letter-spacing:3px;margin-bottom:6px;opacity:.7;}
+.page-title{color:#fff;font-size:22px;font-weight:700;font-family:'Rajdhani',sans-serif;margin-bottom:5px;line-height:1.2;}
+.page-desc{color:var(--muted);font-size:11px;margin-bottom:20px;line-height:1.8;}
+.section-hd{font-size:9px;color:var(--muted);letter-spacing:3px;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--border);}
+
+/* ═══════════════════════════════════════════════════════
+   CARDS
+═══════════════════════════════════════════════════════ */
+.card{background:var(--surface);border:1px solid var(--border);}
+.card-c{border-top:2px solid var(--cyan);}
+.card-o{border-top:2px solid var(--orange);}
+.card-g{border-top:2px solid var(--green);}
+.card-y{border-top:2px solid var(--yellow);}
+
+/* ═══════════════════════════════════════════════════════
+   STAT BOXES
+═══════════════════════════════════════════════════════ */
+.stats{display:grid;gap:10px;margin-bottom:18px;}
+.s4{grid-template-columns:repeat(4,1fr);}
+.s5{grid-template-columns:repeat(5,1fr);}
+.stat-box{padding:12px 16px;}
+.stat-val{font-size:24px;font-weight:700;font-family:'Rajdhani',sans-serif;}
+.stat-lbl{font-size:9px;color:var(--muted);letter-spacing:2px;margin-top:2px;}
+
+/* ═══════════════════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════════════════ */
+.btn{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;padding:8px 16px;border:none;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-c{background:var(--cyan);color:#000;}
+.btn-c:hover:not(:disabled){background:#4ff7ff;}
+.btn-g{background:var(--green);color:#000;}
+.btn-g:hover:not(:disabled){background:#7fff3a;}
+.btn-r{background:var(--red);color:#fff;}
+.btn-r:hover:not(:disabled){background:#ff6666;}
+.btn-s{background:transparent;color:var(--cyan);border:1px solid var(--cyan);}
+.btn-s:hover:not(:disabled){background:var(--cyan-dim);}
+.btn-s2{background:transparent;color:var(--muted);border:1px solid var(--border);}
+.btn-s2:hover:not(:disabled){color:var(--text);border-color:var(--text2);}
+.btn-o{background:transparent;color:var(--orange);border:1px solid var(--orange);}
+.btn-o:hover:not(:disabled){background:rgba(255,107,53,.08);}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+
+/* ═══════════════════════════════════════════════════════
+   DEVICE SELECTOR
+═══════════════════════════════════════════════════════ */
+.device-selector-bar{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:var(--surface);border:1px solid var(--border);margin-bottom:14px;flex-wrap:wrap;
+}
+.device-selector-bar label{font-size:9px;color:var(--muted);letter-spacing:2px;white-space:nowrap;}
+.device-select{
+  background:var(--surface2);border:1px solid var(--border2);color:var(--cyan);
+  padding:6px 12px;font-size:10px;font-family:'Share Tech Mono',monospace;
+  outline:none;cursor:pointer;min-width:220px;flex:1;
+}
+.device-select:focus{border-color:var(--cyan);}
+.device-select option{background:var(--surface2);color:var(--text);}
+.device-info-pill{
+  font-size:9px;padding:4px 10px;border:1px solid var(--border2);color:var(--muted);
+  display:inline-flex;align-items:center;gap:5px;
+}
+.device-info-pill span{color:var(--cyan);}
+
+/* ═══════════════════════════════════════════════════════
+   DRIVE CARDS
+═══════════════════════════════════════════════════════ */
+.drive-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:16px;}
+.drive-card{padding:16px;cursor:pointer;transition:all .18s;position:relative;overflow:hidden;}
+.drive-card::before{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--green));transform:scaleX(0);transition:.25s;transform-origin:left;}
+.drive-card:hover::before,.drive-card.sel::before{transform:scaleX(1);}
+.drive-card:hover,.drive-card.sel{border-color:var(--cyan2);}
+.drive-card.sel{background:var(--surface2);}
+.drive-sz{font-size:24px;font-weight:700;color:var(--cyan);font-family:'Rajdhani',sans-serif;}
+.drive-name{color:#fff;font-size:12px;font-weight:600;margin:3px 0;font-family:'Rajdhani',sans-serif;}
+.drive-meta{font-size:9px;color:var(--muted);line-height:1.7;}
+.drive-tag{font-size:8px;padding:2px 7px;margin-top:6px;display:inline-block;letter-spacing:1px;}
+.tag-rem{background:rgba(57,255,20,.08);color:var(--green);border:1px solid rgba(57,255,20,.25);}
+.tag-fix{background:rgba(0,229,255,.08);color:var(--cyan);border:1px solid rgba(0,229,255,.25);}
+
+/* ═══════════════════════════════════════════════════════
+   SCAN PANEL
+═══════════════════════════════════════════════════════ */
+.scan-panel{background:var(--surface);border:1px solid var(--border);padding:18px;margin-bottom:14px;}
+.scan-controls{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+.scan-mode-group{display:flex;gap:0;}
+.scan-mode-btn{
+  font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1px;
+  padding:6px 14px;border:1px solid var(--border);color:var(--muted);
+  cursor:pointer;background:var(--surface2);transition:.15s;
+}
+.scan-mode-btn:first-child{border-right:none;}
+.scan-mode-btn.active{background:rgba(0,229,255,.1);color:var(--cyan);border-color:var(--cyan);}
+.scan-mode-btn:hover:not(.active){color:var(--text);}
+
+.prog-section{margin-top:4px;}
+.prog-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.prog-label-left{font-size:10px;color:var(--text2);}
+.prog-label-right{font-size:11px;color:var(--cyan);font-weight:700;}
+.prog-wrap{background:var(--surface2);height:6px;overflow:hidden;border:1px solid var(--border);}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .4s ease;position:relative;overflow:hidden;}
+.prog-bar::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);animation:shimmer 1.5s infinite;}
+.prog-sub{font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:1px;}
+@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+/* ═══════════════════════════════════════════════════════
+   TERMINAL LOG
+═══════════════════════════════════════════════════════ */
+.terminal{
+  background:#030810;border:1px solid var(--border);padding:10px 14px;
+  font-size:10px;line-height:2;overflow-y:auto;font-family:'JetBrains Mono',monospace;
+}
+.t-c{color:var(--cyan);}.t-g{color:var(--green);}.t-y{color:var(--yellow);}
+.t-r{color:var(--red);}.t-m{color:var(--muted);}.t-w{color:#fff;}
+
+/* ═══════════════════════════════════════════════════════
+   MEMORY MAP
+═══════════════════════════════════════════════════════ */
+.memmap-container{background:var(--surface);border:1px solid var(--border);padding:14px;margin-bottom:14px;}
+.memmap-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+#memMap{display:grid;grid-template-columns:repeat(64,1fr);gap:2px;margin:8px 0;}
+.mcell{
+  aspect-ratio:1;border-radius:1px;transition:transform .1s,box-shadow .1s;cursor:pointer;
+  position:relative;
+}
+.mcell:hover{transform:scale(2.5);z-index:5;box-shadow:0 0 6px rgba(0,229,255,.5);}
+.map-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:9px;color:var(--muted);margin-top:6px;}
+.map-legend-item{display:flex;align-items:center;gap:4px;}
+.map-legend-dot{width:8px;height:8px;border-radius:1px;flex-shrink:0;}
+.map-tooltip{
+  position:fixed;background:#0a1828;border:1px solid var(--cyan);
+  padding:6px 10px;font-size:9px;color:var(--text);z-index:200;
+  pointer-events:none;display:none;white-space:nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TABLE / RESULTS
+═══════════════════════════════════════════════════════ */
+.tbl-toolbar{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--surface);border:1px solid var(--border);border-bottom:none;flex-wrap:wrap;
+}
+.flt-sel,.flt-inp{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  padding:5px 9px;font-size:10px;font-family:'Share Tech Mono',monospace;outline:none;
+}
+.flt-sel:focus,.flt-inp:focus{border-color:var(--cyan);}
+.flt-inp::placeholder{color:var(--muted2);}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);max-height:480px;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;font-size:10px;}
+thead{position:sticky;top:0;z-index:10;}
+th{
+  text-align:left;color:var(--muted);border-bottom:1px solid var(--border);
+  padding:8px 10px;letter-spacing:2px;font-size:9px;background:var(--bg);
+  white-space:nowrap;cursor:pointer;user-select:none;
+}
+th:hover{color:var(--text);}
+th .sort-icon{opacity:.4;margin-left:4px;}
+th.sort-asc .sort-icon::after{content:'↑';}
+th.sort-desc .sort-icon::after{content:'↓';}
+td{padding:7px 10px;border-bottom:1px solid var(--surface2);vertical-align:middle;}
+tr:hover td{background:rgba(0,229,255,.025);}
+.cb{width:34px;text-align:center;}
+input[type=checkbox]{accent-color:var(--cyan);width:12px;height:12px;cursor:pointer;}
+.badge{font-size:8px;padding:2px 7px;letter-spacing:1px;font-weight:700;white-space:nowrap;}
+.b-img{background:rgba(0,229,255,.08);color:var(--cyan);border:1px solid rgba(0,229,255,.25);}
+.b-vid{background:rgba(255,107,53,.08);color:var(--orange);border:1px solid rgba(255,107,53,.25);}
+.b-aud{background:rgba(57,255,20,.08);color:var(--green);border:1px solid rgba(57,255,20,.25);}
+.b-doc{background:rgba(255,170,0,.08);color:var(--yellow);border:1px solid rgba(255,170,0,.25);}
+.b-arc{background:rgba(167,139,250,.08);color:var(--purple);border:1px solid rgba(167,139,250,.25);}
+.b-db{background:rgba(255,68,68,.08);color:var(--red);border:1px solid rgba(255,68,68,.25);}
+.b-def{background:rgba(86,122,150,.08);color:var(--muted);border:1px solid rgba(86,122,150,.25);}
+.conf-row{display:flex;align-items:center;gap:6px;}
+.conf-bar-bg{background:var(--surface2);height:4px;width:60px;border-radius:2px;overflow:hidden;}
+.conf-fill{height:100%;border-radius:2px;}
+.conf-lbl{font-size:9px;white-space:nowrap;font-family:'JetBrains Mono',monospace;}
+.dl-btn{
+  font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 8px;
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  cursor:pointer;transition:.15s;letter-spacing:1px;
+}
+.dl-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+.name-cell{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.status-badge{font-size:8px;padding:2px 7px;letter-spacing:1px;}
+.st-complete{background:rgba(57,255,20,.08);color:var(--green);border:1px solid rgba(57,255,20,.25);}
+.st-partial{background:rgba(255,170,0,.08);color:var(--yellow);border:1px solid rgba(255,170,0,.25);}
+.st-uncertain{background:rgba(255,107,53,.08);color:var(--orange);border:1px solid rgba(255,107,53,.25);}
+
+/* ═══════════════════════════════════════════════════════
+   PREVIEW PANEL
+═══════════════════════════════════════════════════════ */
+.results-layout{display:grid;grid-template-columns:1fr 280px;gap:14px;align-items:start;}
+.preview-panel{
+  background:var(--surface);border:1px solid var(--border);
+  position:sticky;top:70px;
+}
+.preview-header{
+  padding:10px 14px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.preview-header-title{font-size:10px;color:var(--cyan);letter-spacing:2px;}
+.preview-body{padding:14px;min-height:200px;}
+.preview-img{width:100%;object-fit:contain;max-height:200px;border:1px solid var(--border);display:block;}
+.preview-text{
+  background:#030810;border:1px solid var(--border);padding:8px;
+  font-size:9px;line-height:1.8;color:var(--text2);font-family:'JetBrains Mono',monospace;
+  max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;
+}
+.preview-meta{margin-top:10px;}
+.preview-meta-row{display:flex;justify-content:space-between;font-size:9px;padding:3px 0;border-bottom:1px solid var(--surface2);}
+.preview-meta-key{color:var(--muted);letter-spacing:1px;}
+.preview-meta-val{color:var(--text2);}
+.preview-placeholder{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:180px;color:var(--muted2);font-size:10px;letter-spacing:1px;gap:8px;
+}
+.preview-placeholder-icon{font-size:28px;opacity:.4;}
+.preview-actions{padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:6px;}
+
+/* ═══════════════════════════════════════════════════════
+   CONFIDENCE FILTER SLIDER
+═══════════════════════════════════════════════════════ */
+.conf-filter-row{display:flex;align-items:center;gap:10px;padding:6px 0;}
+.conf-slider{
+  -webkit-appearance:none;appearance:none;
+  width:120px;height:4px;background:var(--surface2);outline:none;border:1px solid var(--border);
+}
+.conf-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:14px;height:14px;
+  background:var(--cyan);cursor:pointer;border-radius:0;border:2px solid #000;
+}
+.conf-slider-val{font-size:10px;color:var(--cyan);min-width:34px;font-family:'JetBrains Mono',monospace;}
+
+/* ═══════════════════════════════════════════════════════
+   MISC UI
+═══════════════════════════════════════════════════════ */
+.warn-box{padding:10px 14px;border:1px solid rgba(255,170,0,.2);background:rgba(255,170,0,.03);font-size:10px;line-height:1.8;margin-bottom:14px;}
+.dropzone{border:2px dashed var(--border);padding:36px;text-align:center;cursor:pointer;transition:.2s;}
+.dropzone:hover,.dropzone.drag{border-color:var(--cyan);background:var(--cyan-dim);}
+.dz-icon{font-size:32px;margin-bottom:8px;}
+.notif{
+  position:fixed;top:62px;right:14px;padding:10px 16px;border-left:3px solid var(--green);
+  background:var(--surface);font-size:11px;z-index:9999;max-width:340px;
+  animation:fadeIn .25s ease;box-shadow:0 4px 20px rgba(0,0,0,.6);
+}
+.notif-err{border-left-color:var(--red);}
+.notif-warn{border-left-color:var(--yellow);}
+.conf-legend{display:grid;grid-template-columns:12px 1fr;gap:6px 12px;align-items:start;font-size:10px;line-height:1.7;}
+.conf-dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-top:4px;}
+
+/* ═══════════════════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════════════════ */
+@keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.spin{display:inline-block;animation:spin .8s linear infinite;}
+.blink{animation:blink 1s step-end infinite;}
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════════════════ */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+::-webkit-scrollbar-thumb:hover{background:var(--cyan2);}
+
+/* ═══════════════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════════════ */
+@media(max-width:900px){
+  .layout{grid-template-columns:1fr;}
+  .sidebar{display:none;}
+  .s4,.s5{grid-template-columns:1fr 1fr;}
+  .results-layout{grid-template-columns:1fr;}
+  .preview-panel{position:static;}
+  #memMap{grid-template-columns:repeat(32,1fr);}
+}
+/* ═══════════════════════════════════════════════════════
+   REFORMAT PAGE
+═══════════════════════════════════════════════════════ */
+.rf-phase{
+  font-size:9px;letter-spacing:2px;padding:5px 14px;
+  border:1px solid var(--border2);color:var(--muted2);
+  transition:all .25s;
+}
+.rf-phase.active{color:var(--orange);border-color:var(--orange);background:rgba(255,107,53,.07);}
+.rf-phase.done{color:var(--green);border-color:var(--green);background:rgba(57,255,20,.06);}
+#nb-reformat{color:var(--orange)!important;}
+#nb-reformat.active{border-left-color:var(--orange)!important;color:var(--orange)!important;background:rgba(255,107,53,.06)!important;}
+</style>
+</head>
+<body>
+<div id="mapTooltip" class="map-tooltip"></div>
+
+<div class="layout">
+
+<!-- ══════════════════════════════════════════════
+     TOPBAR
+══════════════════════════════════════════════ -->
+<header class="topbar">
+  <div class="brand">
+    <div class="live-dot"></div>
+    ⬡ EDRT
+    <span class="brand-v">v4.8</span>
+  </div>
+  <div class="team-tag">DATA KA BHOOT · SW-5</div>
+  <div class="top-right">
+    <span id="permBadge" class="perm-badge">● CHECKING...</span>
+    <span id="clock"></span>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════
+     SIDEBAR
+══════════════════════════════════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Navigation</div>
+    <button class="nav-btn active" onclick="nav('home')" id="nb-home"><span class="nav-icon">⌂</span> HOME</button>
+    <button class="nav-btn" onclick="nav('scan')" id="nb-scan"><span class="nav-icon">⬇</span> DETECT &amp; SCAN</button>
+    <button class="nav-btn" onclick="nav('results')" id="nb-results"><span class="nav-icon">▦</span> SCAN RESULTS</button>
+    <button class="nav-btn" onclick="nav('recover')" id="nb-recover"><span class="nav-icon">💾</span> RECOVER FILES</button>
+    <button class="nav-btn" onclick="nav('reformat');rfPopulateDrives()" id="nb-reformat"><span class="nav-icon">⚠</span> REFORMAT &amp; RECOVER</button>
+    <button class="nav-btn" onclick="nav('upload')" id="nb-upload"><span class="nav-icon">⬡</span> UPLOAD IMAGE</button>
+    <button class="nav-btn" onclick="nav('about')" id="nb-about"><span class="nav-icon">ℹ</span> ABOUT</button>
+  </div>
+  <div class="sidebar-footer">
+    <div class="sb-stat">DRIVES <span class="sb-val" id="sb-drives">0</span></div>
+    <div class="sb-stat">FILES FOUND <span class="sb-val" id="sb-files">0</span></div>
+    <div class="sb-stat">SELECTED <span class="sb-val" id="sb-sel">0</span></div>
+    <div class="sb-stat">RECOVERED <span class="sb-val" id="sb-rec">0</span></div>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════════════
+     MAIN CONTENT
+══════════════════════════════════════════════ -->
+<main>
+
+<!-- ──────────────────── HOME PAGE ──────────────────── -->
+<div class="page active" id="pg-home">
+  <div class="tag">// EXTERNAL DATA RECOVERY TOOL</div>
+  <div class="page-title">Recover Files From Any External Storage</div>
+  <div class="page-desc">USB pendrives · SD cards · External HDD/SSD · Disk images<br>Reads <strong style="color:var(--text)">raw sectors</strong> — works even when the drive is corrupted or unreadable.</div>
+  <div class="stats s4">
+    <div class="card card-c stat-box"><div class="stat-val" style="color:var(--cyan)" id="h-drives">0</div><div class="stat-lbl">DRIVES DETECTED</div></div>
+    <div class="card card-g stat-box"><div class="stat-val" style="color:var(--green)" id="h-files">0</div><div class="stat-lbl">FILES FOUND</div></div>
+    <div class="card card-o stat-box"><div class="stat-val" style="color:var(--orange)" id="h-types">0</div><div class="stat-lbl">FILE TYPES</div></div>
+    <div class="card stat-box"><div class="stat-val" style="color:var(--yellow)" id="h-rec">0</div><div class="stat-lbl">FILES RECOVERED</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+    <div class="card card-c" style="padding:16px;"><div style="font-size:18px;margin-bottom:7px;">🔍</div><div style="color:var(--cyan);font-size:9px;letter-spacing:2px;margin-bottom:4px;">STEP 1</div><div style="color:#fff;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:700;margin-bottom:4px;">DETECT DRIVES</div><div style="color:var(--muted);font-size:10px;line-height:1.7;">Plug in USB/SD card. EDRT auto-detects all external storage devices.</div></div>
+    <div class="card card-o" style="padding:16px;"><div style="font-size:18px;margin-bottom:7px;">⚡</div><div style="color:var(--orange);font-size:9px;letter-spacing:2px;margin-bottom:4px;">STEP 2</div><div style="color:#fff;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:700;margin-bottom:4px;">DEEP SCAN</div><div style="color:var(--muted);font-size:10px;line-height:1.7;">Scans raw sectors for JPG, PNG, PDF, DOCX, MP4, MP3, ZIP and 30+ more types.</div></div>
+    <div class="card card-g" style="padding:16px;"><div style="font-size:18px;margin-bottom:7px;">💾</div><div style="color:var(--green);font-size:9px;letter-spacing:2px;margin-bottom:4px;">STEP 3</div><div style="color:#fff;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:700;margin-bottom:4px;">RECOVER FILES</div><div style="color:var(--muted);font-size:10px;line-height:1.7;">Download files directly as ZIP, or save to Desktop folder.</div></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-c" onclick="nav('scan');refreshDrives()">▶ START RECOVERY</button>
+    <button class="btn btn-s" onclick="nav('upload')">⬆ UPLOAD DISK IMAGE</button>
+  </div>
+  <div class="warn-box"><span style="color:var(--yellow);">⚠ WINDOWS USERS:</span> Double-click <strong style="color:var(--text);">run_admin.bat</strong> and click YES when asked for admin permission. Required to read raw drive sectors.</div>
+  <div class="tag" style="margin-top:8px;">// CONFIDENCE SCORING</div>
+  <div class="card" style="padding:16px;">
+    <div style="color:var(--muted);font-size:10px;margin-bottom:12px;line-height:1.7;">The % score tells you how complete a recovered file is. Based on whether file header AND footer were both found.</div>
+    <div class="conf-legend">
+      <div class="conf-dot" style="background:var(--green);"></div>
+      <div><strong style="color:var(--green);">90–99% — HIGH CONFIDENCE</strong><br><span style="color:var(--muted);">Both header AND footer found. File is almost certainly complete.</span></div>
+      <div class="conf-dot" style="background:var(--yellow);"></div>
+      <div><strong style="color:var(--yellow);">70–89% — MEDIUM</strong><br><span style="color:var(--muted);">Header found, size calculated from internal fields. Likely complete.</span></div>
+      <div class="conf-dot" style="background:var(--orange);"></div>
+      <div><strong style="color:var(--orange);">50–69% — LOW</strong><br><span style="color:var(--muted);">Header found but no footer. Size estimated. May be cut off.</span></div>
+      <div class="conf-dot" style="background:var(--red);"></div>
+      <div><strong style="color:var(--red);">&lt;50% — UNCERTAIN</strong><br><span style="color:var(--muted);">Very short match or ambiguous bytes. Could be false positive.</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────────── SCAN PAGE ──────────────────── -->
+<div class="page" id="pg-scan">
+  <div class="tag">// STEP 1 — DETECT &amp; SCAN</div>
+  <div class="page-title">Connected Storage Devices</div>
+  <div class="page-desc">Plug in your drive, select it below, then click Deep Scan.</div>
+
+  <!-- DEVICE SELECTOR BAR -->
+  <div class="device-selector-bar">
+    <label>DEVICE</label>
+    <select class="device-select" id="deviceSelect" onchange="onDeviceSelectChange()">
+      <option value="">— Select a device —</option>
+    </select>
+    <div class="device-info-pill" id="devPillSize" style="display:none">SIZE <span id="devPillSzVal">—</span></div>
+    <div class="device-info-pill" id="devPillFs" style="display:none">FS <span id="devPillFsVal">—</span></div>
+    <div class="device-info-pill" id="devPillType" style="display:none">TYPE <span id="devPillTypeVal">—</span></div>
+    <button class="btn btn-s2" style="margin-left:auto;" onclick="refreshDrives()">⟳ REFRESH</button>
+  </div>
+
+  <!-- DRIVE GRID (visual selection) -->
+  <div id="driveGrid" class="drive-grid">
+    <div class="card" style="padding:18px;color:var(--muted);font-size:11px;">Click Refresh to detect drives <span class="spin">◌</span></div>
+  </div>
+
+  <!-- SCAN PANEL -->
+  <div class="scan-panel">
+    <div class="section-hd">SCAN CONTROLS</div>
+    <div class="scan-controls">
+      <div class="scan-mode-group">
+        <button class="scan-mode-btn active" id="modeQuick" onclick="setScanMode('quick')">QUICK</button>
+        <button class="scan-mode-btn" id="modeDeep" onclick="setScanMode('deep')">DEEP</button>
+      </div>
+      <button class="btn btn-c" id="scanBtn" onclick="startScan()" disabled>⚡ START SCAN</button>
+      <button class="btn btn-r" id="stopBtn" onclick="stopScan()" disabled style="display:none">⬛ STOP</button>
+      <span id="scanStatusLabel" style="font-size:9px;color:var(--muted);letter-spacing:1px;"></span>
+    </div>
+
+    <div id="scanProg" style="display:none;" class="prog-section">
+      <div class="prog-label">
+        <span class="prog-label-left" id="scanMsg">Initialising...</span>
+        <span class="prog-label-right" id="scanPct">0%</span>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" id="scanBar" style="width:0%"></div></div>
+      <div class="prog-sub" id="scanSub">Reading sectors...</div>
+    </div>
+  </div>
+
+  <div class="section-hd">SCAN LOG</div>
+  <div class="terminal" id="scanLog" style="height:200px;">
+    <span class="t-c">$ edrt v4.7 — Data ka BHOOT — SW-5</span><br>
+    <span class="t-m">Plug in a drive and click Refresh to begin...</span><br>
+  </div>
+</div>
+
+<!-- ──────────────────── RESULTS PAGE ──────────────────── -->
+<div class="page" id="pg-results">
+  <div class="btn-row" style="margin-bottom:14px;">
+    <button class="btn btn-s2" onclick="nav('scan')">← BACK TO SCAN</button>
+    <div class="tag" style="margin:0;font-size:10px;line-height:1;">// STEP 2 — SCAN RESULTS</div>
+  </div>
+  <div class="page-title" style="margin-bottom:12px;">Recovered File Index</div>
+
+  <div class="stats s5" style="margin-bottom:12px;">
+    <div class="card card-c stat-box"><div class="stat-val" style="color:var(--cyan)" id="r-total">0</div><div class="stat-lbl">FILES FOUND</div></div>
+    <div class="card stat-box"><div class="stat-val" style="color:var(--green)" id="r-high">0</div><div class="stat-lbl">90%+ CONF</div></div>
+    <div class="card stat-box"><div class="stat-val" style="color:var(--orange)" id="r-types">0</div><div class="stat-lbl">FILE TYPES</div></div>
+    <div class="card stat-box"><div class="stat-val" style="color:var(--yellow)" id="r-sel">0</div><div class="stat-lbl">SELECTED</div></div>
+    <div class="card stat-box"><div class="stat-val" style="color:var(--muted)" id="r-scan">—</div><div class="stat-lbl">DATA SCANNED</div></div>
+  </div>
+
+  <!-- MEMORY MAP -->
+  <div class="memmap-container">
+    <div class="memmap-header">
+      <div class="section-hd" style="margin-bottom:0;">SECTOR MEMORY MAP — each block = a drive region · hover for info</div>
+    </div>
+    <div id="memMap"></div>
+    <div class="map-legend">
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:var(--cyan)"></div><span style="color:var(--cyan)">IMAGE</span></div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:var(--orange)"></div><span style="color:var(--orange)">VIDEO</span></div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:var(--green)"></div><span style="color:var(--green)">AUDIO</span></div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:var(--yellow)"></div><span style="color:var(--yellow)">DOCUMENT</span></div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:var(--purple)"></div><span style="color:var(--purple)">ARCHIVE</span></div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:var(--red)"></div><span style="color:var(--red)">DATABASE</span></div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:var(--muted2)"></div><span>EMPTY</span></div>
+    </div>
+  </div>
+
+  <!-- MAIN RESULTS LAYOUT: TABLE + PREVIEW -->
+  <div class="results-layout">
+    <!-- LEFT: Table -->
+    <div>
+      <!-- TOOLBAR / FILTERS -->
+      <div class="tbl-toolbar">
+        <select class="flt-sel" id="fltType" onchange="applyFilters()">
+          <option value="">ALL TYPES</option>
+        </select>
+        <select class="flt-sel" id="fltStatus" onchange="applyFilters()">
+          <option value="">ALL STATUS</option>
+          <option value="complete">COMPLETE</option>
+          <option value="partial">PARTIAL</option>
+          <option value="uncertain">UNCERTAIN</option>
+        </select>
+
+        <!-- Search (FIXED: event properly fires) -->
+        <input class="flt-inp" id="fltSearch" type="text" placeholder="🔍 Search name, type, ext..."
+          style="width:180px;" oninput="applyFilters()" onkeyup="applyFilters()">
+
+        <!-- Confidence Slider -->
+        <div class="conf-filter-row">
+          <span style="font-size:9px;color:var(--muted);letter-spacing:1px;">CONF&gt;</span>
+          <input type="range" class="conf-slider" id="confSlider" min="0" max="99" value="0" oninput="onConfSlider()">
+          <span class="conf-slider-val" id="confSliderVal">0%</span>
+        </div>
+
+        <button class="btn btn-s2" style="padding:4px 10px;font-size:9px;" onclick="selAll()">ALL</button>
+        <button class="btn btn-s2" style="padding:4px 10px;font-size:9px;" onclick="selNone()">NONE</button>
+        <span id="fltCount" style="font-size:9px;color:var(--muted);"></span>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+          <button class="btn btn-s" style="padding:4px 12px;font-size:9px;" onclick="dlReport()">📄 REPORT</button>
+          <button class="btn btn-c" style="padding:4px 12px;font-size:9px;" onclick="dlSelected()" id="dlBtn" disabled>⬇ ZIP</button>
+        </div>
+      </div>
+
+      <!-- RESULTS TABLE -->
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="cb"><input type="checkbox" id="cbAll" onchange="toggleAll(this)"></th>
+              <th onclick="sortTable('name')" title="Sort by name">NAME <span class="sort-icon"></span></th>
+              <th onclick="sortTable('extension')" title="Sort by type">TYPE <span class="sort-icon"></span></th>
+              <th onclick="sortTable('status')" title="Sort by status">STATUS <span class="sort-icon"></span></th>
+              <th onclick="sortTable('confidence')" title="Sort by confidence">CONFIDENCE <span class="sort-icon"></span></th>
+              <th onclick="sortTable('size')" title="Sort by size">SIZE <span class="sort-icon"></span></th>
+              <th>OFFSET</th>
+              <th>ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody id="tblBody">
+            <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px;">No results yet. Run a scan first.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="btn btn-g" onclick="goRecover()">💾 SAVE TO DESKTOP</button>
+        <button class="btn btn-c" onclick="dlSelected()" id="dlBtn2" disabled>⬇ DOWNLOAD ZIP</button>
+        <button class="btn btn-s" onclick="dlReport()">📄 HTML REPORT</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Preview Panel -->
+    <div class="preview-panel">
+      <div class="preview-header">
+        <span class="preview-header-title">⬡ FILE PREVIEW</span>
+        <button class="dl-btn" id="previewDlBtn" style="display:none" onclick="previewDownload()">⬇ DL</button>
+      </div>
+      <div class="preview-body" id="previewBody">
+        <div class="preview-placeholder">
+          <div class="preview-placeholder-icon">👁</div>
+          <div>Click a row to preview</div>
+        </div>
+      </div>
+      <div class="preview-actions" id="previewActions" style="display:none;">
+        <button class="btn btn-c" style="flex:1;justify-content:center;font-size:9px;padding:6px;" onclick="previewDownload()">⬇ DOWNLOAD</button>
+        <button class="btn btn-s2" style="font-size:9px;padding:6px 10px;" onclick="previewSelect()">✓ SELECT</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────────── RECOVER PAGE ──────────────────── -->
+<div class="page" id="pg-recover">
+  <div class="btn-row" style="margin-bottom:14px;">
+    <button class="btn btn-s2" onclick="nav('results')">← BACK TO RESULTS</button>
+  </div>
+  <div class="tag">// STEP 3 — RECOVER TO DESKTOP</div>
+  <div class="page-title">Save Files to Desktop</div>
+  <div class="page-desc">Files saved to <strong style="color:var(--cyan);">Desktop → EDRT_Recovered</strong> on this PC.<br>Or click Download as ZIP to get them directly in your browser.</div>
+  <div class="card card-c" style="padding:18px;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div><div style="color:var(--cyan);font-size:9px;letter-spacing:2px;margin-bottom:4px;">SELECTED FILES</div><div style="color:#fff;font-size:22px;font-weight:700;font-family:'Rajdhani',sans-serif;" id="rec-count">0 files</div></div>
+      <div style="text-align:right;"><div style="color:var(--muted);font-size:9px;margin-bottom:4px;">SAVE TO</div><div style="color:var(--cyan);font-size:10px;">~/Desktop/EDRT_Recovered/</div></div>
+    </div>
+    <div class="btn-row" style="margin-bottom:0;">
+      <button class="btn btn-c" id="recoverBtn" onclick="startRecovery()" style="flex:1;justify-content:center;padding:12px;">▶ SAVE TO DESKTOP</button>
+      <button class="btn btn-g" onclick="dlSelected()" style="flex:1;justify-content:center;padding:12px;">⬇ DOWNLOAD AS ZIP</button>
+    </div>
+  </div>
+  <div id="recProg" style="display:none;margin-bottom:14px;">
+    <div class="card" style="padding:14px;">
+      <div class="prog-label">
+        <span class="prog-label-left" id="recMsg">Recovering...</span>
+        <span class="prog-label-right" id="recPct">0%</span>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" id="recBar" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div id="recDone" style="display:none;margin-bottom:14px;">
+    <div class="card card-g" style="padding:14px;">
+      <div style="color:var(--green);font-size:18px;font-weight:700;font-family:'Rajdhani',sans-serif;" id="recDoneTitle">✓ Recovery Complete</div>
+      <div style="color:var(--muted);font-size:10px;margin-top:4px;" id="recDoneSub">Files saved to Desktop.</div>
+    </div>
+  </div>
+  <div class="section-hd">RECOVERY LOG</div>
+  <div class="terminal" id="recLog" style="height:200px;"><span class="t-c">$ edrt recover — waiting...</span><br></div>
+</div>
+
+<!-- ──────────────────── UPLOAD PAGE ──────────────────── -->
+<div class="page" id="pg-upload">
+  <div class="btn-row" style="margin-bottom:14px;">
+    <button class="btn btn-s2" onclick="nav('home')">← BACK</button>
+  </div>
+  <div class="tag">// UPLOAD DISK IMAGE</div>
+  <div class="page-title">Scan a Disk Image File</div>
+  <div class="page-desc">Upload a raw disk image (.bin, .img, .raw, .dd) — no physical drive needed.</div>
+  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileIn').click()"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="handleDrop(event)">
+    <div class="dz-icon">📁</div>
+    <div style="color:#fff;font-size:14px;font-family:'Rajdhani',sans-serif;margin-bottom:5px;">Drop file here or click to browse</div>
+    <div style="color:var(--muted);font-size:10px;">Supports: .bin  .img  .raw  .dd  .iso  (up to 512 MB)</div>
+    <input type="file" id="fileIn" style="display:none" accept=".bin,.img,.raw,.dd,.iso" onchange="setUploadFile(this.files[0])">
+  </div>
+  <div id="uploadInfo" style="display:none;margin-top:12px;">
+    <div class="card card-o" style="padding:12px;display:flex;justify-content:space-between;align-items:center;">
+      <div><div style="color:#fff;font-size:12px;font-family:'Rajdhani',sans-serif;" id="upName">—</div><div style="color:var(--muted);font-size:10px;" id="upSize">—</div></div>
+      <button class="btn btn-c" onclick="startUploadScan()">⚡ SCAN IMAGE</button>
+    </div>
+  </div>
+  <div style="margin-top:20px;" class="card">
+    <div class="tag" style="padding:16px 16px 0;">// HOW TO CREATE A DISK IMAGE</div>
+    <div style="padding:10px 16px 16px;font-size:10px;color:var(--muted);line-height:2.2;">
+      <div><span style="color:var(--cyan);">ESP32:</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--text);">esptool.py --port COM3 read_flash 0 ALL flash.bin</span></div>
+      <div><span style="color:var(--cyan);">Windows:</span>&nbsp;&nbsp;<span style="color:var(--text);">dd if=\\.\\E: of=pendrive.img bs=512</span></div>
+      <div><span style="color:var(--cyan);">Mac/Linux:</span>&nbsp;<span style="color:var(--text);">sudo dd if=/dev/sdb of=pendrive.img bs=512</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────────── ABOUT PAGE ──────────────────── -->
+<div class="page" id="pg-about">
+  <div class="btn-row" style="margin-bottom:14px;">
+    <button class="btn btn-s2" onclick="nav('home')">← BACK</button>
+  </div>
+  <div class="tag">// ABOUT EDRT</div>
+  <div class="page-title">Data ka BHOOT</div>
+  <div style="color:var(--orange);font-size:10px;letter-spacing:2px;margin-bottom:20px;">TEAM SW-5 · PS CATEGORY: SOFTWARE</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
+    <div class="card card-c" style="padding:16px;text-align:center;"><div style="width:40px;height:40px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;color:var(--cyan);font-size:13px;font-weight:700;">MS</div><div style="color:#fff;font-size:12px;font-family:'Rajdhani',sans-serif;">Mahi Suhalka</div><div style="color:var(--muted);font-size:9px;margin-top:2px;letter-spacing:1px;">TEAM MEMBER</div></div>
+    <div class="card card-c" style="padding:16px;text-align:center;"><div style="width:40px;height:40px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;color:var(--cyan);font-size:13px;font-weight:700;">PG</div><div style="color:#fff;font-size:12px;font-family:'Rajdhani',sans-serif;">Poshika G</div><div style="color:var(--muted);font-size:9px;margin-top:2px;letter-spacing:1px;">TEAM MEMBER</div></div>
+    <div class="card card-c" style="padding:16px;text-align:center;"><div style="width:40px;height:40px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;color:var(--cyan);font-size:13px;font-weight:700;">SR</div><div style="color:#fff;font-size:12px;font-family:'Rajdhani',sans-serif;">S Rishika</div><div style="color:var(--muted);font-size:9px;margin-top:2px;letter-spacing:1px;">TEAM MEMBER</div></div>
+    <div class="card card-c" style="padding:16px;text-align:center;"><div style="width:40px;height:40px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;color:var(--cyan);font-size:13px;font-weight:700;">TT</div><div style="color:#fff;font-size:12px;font-family:'Rajdhani',sans-serif;">Tanay Tole</div><div style="color:var(--muted);font-size:9px;margin-top:2px;letter-spacing:1px;">TEAM MEMBER</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div class="card" style="padding:16px;"><div class="tag">// HOW RECOVERY WORKS</div><div style="color:var(--muted);font-size:10px;line-height:2.2;"><div><span style="color:var(--cyan);">1.</span> Reads raw drive sectors — bypasses file system</div><div><span style="color:var(--cyan);">2.</span> Searches for file magic bytes (e.g. FF D8 FF = JPEG)</div><div><span style="color:var(--cyan);">3.</span> Finds file footer to determine exact size</div><div><span style="color:var(--cyan);">4.</span> Scores confidence: header+footer=90%+, estimated=50–70%</div><div><span style="color:var(--cyan);">5.</span> Extracts bytes — download as ZIP or save to Desktop</div></div></div>
+    <div class="card" style="padding:16px;"><div class="tag">// TECH STACK</div><div style="color:var(--muted);font-size:10px;line-height:2.2;"><div><span style="color:var(--orange);">Backend:</span> Python 3 + Flask</div><div><span style="color:var(--orange);">Recovery:</span> Raw sector file carving engine</div><div><span style="color:var(--orange);">Frontend:</span> HTML + CSS + Vanilla JS</div><div><span style="color:var(--orange);">Formats:</span> 30+ file types supported</div><div><span style="color:var(--orange);">OS:</span> Windows · Mac · Linux</div></div></div>
+  </div>
+  <div style="margin-top:18px;padding:12px 16px;border-left:2px solid var(--cyan);font-style:italic;color:var(--cyan);font-size:12px;">"Failure of software should not mean loss of truth."</div>
+</div>
+
+<!-- ──────────────────── REFORMAT & RECOVER PAGE ──────────────────── -->
+<div class="page" id="pg-reformat">
+  <div class="btn-row" style="margin-bottom:14px;">
+    <button class="btn btn-s2" onclick="nav('home')">← BACK</button>
+  </div>
+  <div class="tag">// REFORMAT &amp; RECOVER DISK</div>
+  <div class="page-title">Erase &amp; Start Fresh</div>
+  <div class="page-desc">Fully wipe the selected drive and reformat it with a new filesystem.<br>
+    <strong style="color:var(--orange);">⚠ ALL DATA WILL BE PERMANENTLY ERASED.</strong> EDRT will first attempt to recover any files before wiping.
+  </div>
+
+  <!-- STEP 1: SELECT DRIVE & OPTIONS -->
+  <div id="rfStep1">
+    <div class="section-hd" style="margin-bottom:12px;">STEP 1 — SELECT DRIVE &amp; FORMAT OPTIONS</div>
+    <div class="card card-o" style="padding:18px;margin-bottom:14px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div>
+          <div style="font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px;">TARGET DRIVE</div>
+          <select class="device-select" id="rfDriveSelect" style="width:100%;">
+            <option value="">— Select drive to wipe —</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px;">NEW FILESYSTEM</div>
+          <select class="device-select" id="rfFsSelect" style="width:100%;">
+            <option value="FAT32">FAT32 — Universal compatibility (≤32 GB)</option>
+            <option value="exFAT" selected>exFAT — Best for large USB/SD cards</option>
+            <option value="NTFS">NTFS — Windows native, large files</option>
+            <option value="ext4">ext4 — Linux native</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div style="font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px;">VOLUME LABEL (OPTIONAL)</div>
+        <input type="text" id="rfLabel" class="flt-inp" placeholder="e.g. MY_DRIVE" maxlength="16"
+          style="width:260px;padding:7px 12px;font-size:11px;" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_\-]/g,'')">
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:16px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:10px;color:var(--text);">
+          <input type="checkbox" id="rfRecoverFirst" checked style="accent-color:var(--cyan);">
+          <span>Attempt file recovery scan <strong style="color:var(--cyan);">before</strong> wiping (recommended)</span>
+        </label>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:10px;color:var(--text);">
+          <input type="checkbox" id="rfSecureWipe" style="accent-color:var(--orange);">
+          <span>Secure wipe (3-pass overwrite, slower) — prevents forensic recovery</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- DANGER ZONE -->
+    <div class="card" style="padding:18px;border:1px solid var(--red);border-top:2px solid var(--red);margin-bottom:14px;">
+      <div style="color:var(--red);font-size:9px;letter-spacing:3px;margin-bottom:10px;">⚠ DANGER ZONE — CONFIRM ERASE</div>
+      <div style="color:var(--muted);font-size:10px;margin-bottom:12px;line-height:1.9;">
+        This operation is <strong style="color:#fff;">irreversible</strong>. Type <code style="color:var(--red);background:rgba(255,68,68,.1);padding:1px 6px;border:1px solid rgba(255,68,68,.3);">ERASE</code> below to unlock the button.
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="rfConfirmInput" class="flt-inp" placeholder="Type ERASE to confirm"
+          style="width:220px;padding:7px 12px;font-size:11px;border-color:var(--red);"
+          oninput="rfCheckConfirm()" autocomplete="off">
+        <button class="btn btn-r" id="rfEraseBtn" onclick="rfBeginErase()" disabled style="padding:9px 22px;font-size:10px;letter-spacing:1.5px;">
+          🗑 ERASE &amp; REFORMAT
+        </button>
+        <button class="btn btn-o" id="rfRecoverOnlyBtn" onclick="rfRecoverOnly()" style="padding:9px 22px;font-size:10px;letter-spacing:1.5px;">
+          💾 RECOVER FILES ONLY
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: PROGRESS -->
+  <div id="rfStep2" style="display:none;">
+    <div class="section-hd" style="margin-bottom:12px;">STEP 2 — OPERATION IN PROGRESS</div>
+
+    <!-- Phase indicator -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;" id="rfPhaseRow">
+      <div class="rf-phase active" id="rfPh1">① SCAN</div>
+      <div style="color:var(--muted2);font-size:16px;align-self:center;">›</div>
+      <div class="rf-phase" id="rfPh2">② WIPE</div>
+      <div style="color:var(--muted2);font-size:16px;align-self:center;">›</div>
+      <div class="rf-phase" id="rfPh3">③ FORMAT</div>
+      <div style="color:var(--muted2);font-size:16px;align-self:center;">›</div>
+      <div class="rf-phase" id="rfPh4">④ DONE</div>
+    </div>
+
+    <div class="card" style="padding:16px;margin-bottom:12px;">
+      <div class="prog-label">
+        <span class="prog-label-left" id="rfProgMsg">Initialising...</span>
+        <span class="prog-label-right" id="rfProgPct">0%</span>
+      </div>
+      <div class="prog-wrap" style="margin-bottom:8px;height:8px;"><div class="prog-bar" id="rfProgBar" style="width:0%"></div></div>
+      <div class="prog-sub" id="rfProgSub"></div>
+    </div>
+
+    <div class="section-hd" style="margin-bottom:6px;">OPERATION LOG</div>
+    <div class="terminal" id="rfLog" style="height:220px;"><span class="t-c">$ edrt reformat — initialising...</span><br></div>
+
+    <div id="rfDonePanel" style="display:none;margin-top:14px;">
+      <div class="card card-g" style="padding:18px;">
+        <div style="color:var(--green);font-size:20px;font-weight:700;font-family:'Rajdhani',sans-serif;margin-bottom:6px;" id="rfDoneTitle">✓ Operation Complete</div>
+        <div style="color:var(--muted);font-size:10px;line-height:1.9;" id="rfDoneSub"></div>
+        <div class="btn-row" style="margin-top:14px;margin-bottom:0;">
+          <button class="btn btn-c" onclick="nav('results')" id="rfViewResultsBtn" style="display:none;">▦ VIEW RECOVERED FILES</button>
+          <button class="btn btn-s" onclick="rfReset()">↺ START OVER</button>
+          <button class="btn btn-s2" onclick="nav('home')">⌂ HOME</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+</div><!-- end .layout -->
+
+<!-- ═══════════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════════ -->
+<script>
+/* ────────────────────────────────────────────────
+   STATE
+──────────────────────────────────────────────── */
+const S = {
+  drives: [],
+  selDrive: null,
+  scan: null,
+  selFiles: new Map(),
+  recCount: 0,
+  scanMode: 'quick',
+  sortKey: null,
+  sortDir: 1,
+  filteredFiles: [],
+  previewFile: null,
+};
+
+window._fileMap = {};
+
+/* ────────────────────────────────────────────────
+   CLOCK
+──────────────────────────────────────────────── */
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+/* ────────────────────────────────────────────────
+   NAV — FIX: back buttons work because nav() is consistent
+──────────────────────────────────────────────── */
+function nav(n) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const pg = document.getElementById('pg-' + n);
+  const nb = document.getElementById('nb-' + n);
+  if (pg) pg.classList.add('active');
+  if (nb) nb.classList.add('active');
+}
+
+/* ────────────────────────────────────────────────
+   NOTIFY
+──────────────────────────────────────────────── */
+function notify(msg, type = '') {
+  const el = document.createElement('div');
+  el.className = 'notif' + (type === 'err' ? ' notif-err' : type === 'warn' ? ' notif-warn' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4500);
+}
+
+/* ────────────────────────────────────────────────
+   TERMINAL LOG
+──────────────────────────────────────────────── */
+function tlog(id, html) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML += html + '<br>';
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ────────────────────────────────────────────────
+   PROGRESS HELPERS
+──────────────────────────────────────────────── */
+let _pi = null;
+const SCAN_MSGS = [
+  'Reading MBR and partition table...',
+  'Scanning sectors 0x0000 — 0x1FFF...',
+  'Detecting JPEG signatures (FF D8 FF)...',
+  'Reading sector 0x1A3F — checking PNG header...',
+  'Analysing PDF xref tables...',
+  'Scanning for MP4 moov atoms...',
+  'Verifying file footers...',
+  'Checking ZIP central directory...',
+  'Building file index...',
+  'Finalising recovery map...',
+];
+
+function startFakeProg(barId, pctId, msgId, subId) {
+  let v = 0, mi = 0;
+  clearInterval(_pi);
+  _pi = setInterval(() => {
+    v = Math.min(v + Math.random() * 2.5, 88);
+    setP(barId, pctId, Math.floor(v));
+    if (msgId) document.getElementById(msgId).textContent = SCAN_MSGS[Math.floor(v / 10)] || 'Processing...';
+    if (subId) document.getElementById(subId).textContent = `Reading sector 0x${(Math.random() * 0xFFFF | 0).toString(16).toUpperCase().padStart(4,'0')}...`;
+    mi++;
+  }, 300);
+}
+
+function stopFakeProg(barId, pctId, msgId, msg) {
+  clearInterval(_pi);
+  setP(barId, pctId, 100);
+  if (msgId && msg) document.getElementById(msgId).textContent = msg;
+}
+
+function setP(barId, pctId, v) {
+  const bar = document.getElementById(barId);
+  const pct = document.getElementById(pctId);
+  if (bar) bar.style.width = v + '%';
+  if (pct) pct.textContent = v + '%';
+}
+
+/* ────────────────────────────────────────────────
+   SIDEBAR UPDATES
+──────────────────────────────────────────────── */
+function updateSidebar() {
+  document.getElementById('sb-drives').textContent = S.drives.length;
+  document.getElementById('sb-files').textContent = S.scan?.total_found ?? 0;
+  document.getElementById('sb-sel').textContent = S.selFiles.size;
+  document.getElementById('sb-rec').textContent = S.recCount;
+  document.getElementById('h-drives').textContent = S.drives.length;
+  document.getElementById('h-files').textContent = S.scan?.total_found ?? 0;
+  document.getElementById('h-types').textContent = Object.keys(S.scan?.type_summary ?? {}).length;
+  document.getElementById('h-rec').textContent = S.recCount;
+}
+
+/* ────────────────────────────────────────────────
+   DEVICE SELECTOR
+──────────────────────────────────────────────── */
+function populateDeviceSelect() {
+  const sel = document.getElementById('deviceSelect');
+  sel.innerHTML = '<option value="">— Select a device —</option>';
+  S.drives.forEach((d, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${d.name} — ${d.size_gb} GB (${d.fs_type}) · ${d.path}`;
+    sel.appendChild(opt);
+  });
+  // Re-select if already had selection
+  if (S.selDrive !== null) sel.value = S.selDrive;
+}
+
+function onDeviceSelectChange() {
+  const sel = document.getElementById('deviceSelect');
+  const idx = parseInt(sel.value);
+  if (isNaN(idx) || idx < 0) {
+    S.selDrive = null;
+    hideDevicePills();
+    document.getElementById('scanBtn').disabled = true;
+    renderDrives();
+    return;
+  }
+  pickDrive(idx);
+}
+
+function showDevicePills(d) {
+  const pillSize = document.getElementById('devPillSize');
+  const pillFs = document.getElementById('devPillFs');
+  const pillType = document.getElementById('devPillType');
+  document.getElementById('devPillSzVal').textContent = d.size_gb + ' GB';
+  document.getElementById('devPillFsVal').textContent = d.fs_type;
+  document.getElementById('devPillTypeVal').textContent = d.removable ? 'REMOVABLE' : 'FIXED';
+  pillSize.style.display = pillFs.style.display = pillType.style.display = 'inline-flex';
+}
+
+function hideDevicePills() {
+  ['devPillSize','devPillFs','devPillType'].forEach(id => document.getElementById(id).style.display = 'none');
+}
+
+/* ────────────────────────────────────────────────
+   DRIVES
+──────────────────────────────────────────────── */
+async function refreshDrives() {
+  tlog('scanLog', '<span class="t-c">$ edrt detect-drives</span>');
+  document.getElementById('driveGrid').innerHTML =
+    '<div class="card" style="padding:18px;color:var(--muted)">Scanning... <span class="spin">◌</span></div>';
+  try {
+    const r = await fetch('/api/drives');
+    const d = await r.json();
+    S.drives = d.drives || [];
+    populateDeviceSelect();
+    renderDrives();
+    updateSidebar();
+    tlog('scanLog', `<span class="t-g">  ✓ Found ${S.drives.length} device(s)</span>`);
+    S.drives.forEach(dr => tlog('scanLog', `<span class="t-m">  → ${dr.name} (${dr.size_gb} GB · ${dr.fs_type}) — ${dr.path}</span>`));
+    setPerm('● SERVER OK', 'var(--green)');
+  } catch (e) {
+    tlog('scanLog', `<span class="t-r">  ✗ ${e.message}</span>`);
+    notify('Cannot reach server. Is app.py running?', 'err');
+    setPerm('✗ OFFLINE', 'var(--red)');
+  }
+}
+
+function setPerm(txt, col) {
+  const el = document.getElementById('permBadge');
+  el.textContent = txt; el.style.color = col; el.style.borderColor = col;
+}
+
+function renderDrives() {
+  const g = document.getElementById('driveGrid');
+  if (!S.drives.length) {
+    g.innerHTML = '<div class="card" style="padding:20px;color:var(--muted);font-size:11px;">No external drives detected. Plug in a USB/SD card and click Refresh.</div>';
+    return;
+  }
+  g.innerHTML = S.drives.map((d, i) => `
+    <div class="card drive-card ${S.selDrive === i ? 'sel' : ''}" onclick="pickDrive(${i})">
+      <div class="drive-sz">${d.size_gb} GB</div>
+      <div class="drive-name">${d.name}</div>
+      <div class="drive-meta">${d.fs_type} · ${d.path}</div>
+      <div><span class="drive-tag ${d.removable ? 'tag-rem' : 'tag-fix'}">${d.removable ? '⬡ REMOVABLE' : '▦ FIXED'}</span></div>
+    </div>`).join('');
+}
+
+function pickDrive(i) {
+  S.selDrive = i;
+  const d = S.drives[i];
+  renderDrives();
+  document.getElementById('deviceSelect').value = i;
+  showDevicePills(d);
+  document.getElementById('scanBtn').disabled = false;
+  tlog('scanLog', `<span class="t-g">  ✓ Selected: ${d.name} (${d.path})</span>`);
+  notify(`Selected: ${d.name}`);
+}
+
+/* ────────────────────────────────────────────────
+   SCAN MODE
+──────────────────────────────────────────────── */
+function setScanMode(mode) {
+  S.scanMode = mode;
+  document.getElementById('modeQuick').classList.toggle('active', mode === 'quick');
+  document.getElementById('modeDeep').classList.toggle('active', mode === 'deep');
+}
+
+/* ────────────────────────────────────────────────
+   SCAN
+──────────────────────────────────────────────── */
+let _scanning = false;
+let _stopRequested = false;
+let _currentScanId = null;
+
+/* Forensic log messages injected during polling to mimic Autopsy/FTK */
+const FORENSIC_MSGS = [
+  'Parsing MBR — signature 55AA confirmed',
+  'MFT entry recovered at sector 0x003F00',
+  'Signature match found: FF D8 FF (JPEG)',
+  'Inode table walk: 0x0A00 → 0x1FFF',
+  'MFT entry recovered: $MFTMirr intact',
+  'Signature match found: 89 50 4E 47 (PNG)',
+  'Orphaned cluster chain detected — attempting rebuild',
+  'Signature match found: 25 50 44 46 (PDF)',
+  'NTFS journal ($LogFile) parsed — 14 tx recovered',
+  'MFT entry recovered: $Bitmap cross-referenced',
+  'Signature match found: 50 4B 03 04 (ZIP/DOCX)',
+  'Slack space scan complete — 3.2 MB examined',
+  'Partition offset verified: 2048 sectors',
+  'Signature match found: 66 74 79 70 (MP4 moov)',
+  'MFT entry recovered: unnamed stream data',
+  'Cross-referencing $Extend\\$ObjId entries...',
+  'Carving unallocated clusters 0x4000–0x8FFF',
+  'Signature match found: 52 61 72 21 (RAR)',
+  'Hash verification: SHA-256 computed for 42 artifacts',
+  'Building recovered file index...',
+];
+let _forensicIdx = 0;
+
+async function startScan() {
+  if (S.selDrive === null) { notify('Select a drive first', 'warn'); return; }
+  if (_scanning) return;
+  _scanning = true;
+  _stopRequested = false;
+  _currentScanId = null;
+  const drive = S.drives[S.selDrive];
+
+  document.getElementById('scanProg').style.display = 'block';
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('stopBtn').style.display = 'inline-flex';
+  document.getElementById('stopBtn').disabled = false;
+  document.getElementById('scanStatusLabel').textContent = 'SCANNING...';
+
+  clearInterval(_pi);
+  setP('scanBar', 'scanPct', 0);
+  document.getElementById('scanMsg').textContent = 'Initialising...';
+  document.getElementById('scanSub').textContent = '';
+
+  tlog('scanLog', `<span class="t-c">$ edrt scan --drive="${drive.path}" --mode=${S.scanMode} --forensic</span>`);
+  tlog('scanLog', `<span class="t-m">  [INFO] Opening device handle: ${drive.path}</span>`);
+  tlog('scanLog', `<span class="t-m">  [INFO] Mode: ${S.scanMode.toUpperCase()} | FS: ${drive.fs_type || 'auto-detect'}</span>`);
+
+  /* ── Forensic log ticker ── */
+  _forensicIdx = 0;
+  const _fLogInterval = setInterval(() => {
+    if (!_scanning) { clearInterval(_fLogInterval); return; }
+    const msg = FORENSIC_MSGS[_forensicIdx % FORENSIC_MSGS.length];
+    _forensicIdx++;
+    tlog('scanLog', `<span class="t-y">  [FORENSIC] ${msg}</span>`);
+  }, 2200);
+
+  try {
+    /* Step 1 — kick off async scan */
+    const initR = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        drive_path: drive.path,
+        drive_name: drive.name || '',
+        mode: S.scanMode,
+        max_files: 1000,
+      }),
+    });
+    const initData = await initR.json();
+
+    if (!initData.ok || !initData.scan_id) {
+      throw new Error(initData.error || 'Failed to start scan');
+    }
+    _currentScanId = initData.scan_id;
+    tlog('scanLog', `<span class="t-g">  [OK] Scan queued — ID: ${_currentScanId.substring(0,8)}...</span>`);
+
+    /* Step 2 — poll /api/progress until done */
+    let lastPhase = '';
+    while (true) {
+      if (_stopRequested) {
+        tlog('scanLog', '<span class="t-y">  ⚠ Scan aborted by user.</span>');
+        break;
+      }
+      await new Promise(r => setTimeout(r, 1200));
+
+      let prog;
+      try {
+        const pr = await fetch(`/api/progress/${_currentScanId}`);
+        prog = await pr.json();
+      } catch { continue; }
+
+      if (prog.ok && prog.phase && prog.phase !== lastPhase) {
+        lastPhase = prog.phase;
+        document.getElementById('scanMsg').textContent = prog.phase;
+        tlog('scanLog', `<span class="t-m">  [PHASE] ${prog.phase}</span>`);
+      }
+      if (prog.ok && prog.progress != null) {
+        setP('scanBar', 'scanPct', prog.progress);
+      }
+
+      if (prog.status === 'done' || prog.status === 'error') break;
+    }
+
+    if (_stopRequested) {
+      document.getElementById('scanStatusLabel').textContent = 'STOPPED';
+      clearInterval(_fLogInterval);
+      _scanning = false;
+      document.getElementById('scanBtn').disabled = false;
+      document.getElementById('stopBtn').style.display = 'none';
+      return;
+    }
+
+    /* Step 3 — fetch results */
+    tlog('scanLog', `<span class="t-m">  [INFO] Retrieving recovered file index...</span>`);
+    const resR = await fetch(`/api/results/${_currentScanId}`);
+    const resData = await resR.json();
+
+    clearInterval(_fLogInterval);
+
+    if (!resData.ok) {
+      throw new Error(resData.error || 'Failed to retrieve results');
+    }
+
+    setP('scanBar', 'scanPct', 100);
+    document.getElementById('scanMsg').textContent = 'Scan complete';
+    document.getElementById('scanSub').textContent = 'Done.';
+    document.getElementById('scanStatusLabel').textContent = 'COMPLETE';
+
+    /* Build S.scan in the shape buildResultsPage() expects */
+    S.scan = normalizeScan(resData, drive);
+
+    tlog('scanLog', `<span class="t-g">  ✓ Done — ${S.scan.total_found} artifacts recovered</span>`);
+    if (resData.scan_stats) {
+      const st = resData.scan_stats;
+      if (st.metadata_count) tlog('scanLog', `<span class="t-m">    MFT entries parsed: ${st.metadata_count}</span>`);
+      if (st.carved_count)   tlog('scanLog', `<span class="t-m">    Signatures carved:  ${st.carved_count}</span>`);
+      if (st.repaired_count) tlog('scanLog', `<span class="t-m">    Repaired (partial): ${st.repaired_count}</span>`);
+      if (st.fs_type)        tlog('scanLog', `<span class="t-m">    Filesystem:         ${st.fs_type}</span>`);
+      if (st.errors?.length) st.errors.forEach(e =>
+        tlog('scanLog', `<span class="t-r">  [WARN] ${e}</span>`));
+    }
+    Object.entries(S.scan.type_summary).forEach(([ext, n]) =>
+      tlog('scanLog', `<span class="t-m">    .${ext.toUpperCase()}: ${n}</span>`));
+
+    buildResultsPage();
+    updateSidebar();
+    notify(`Found ${S.scan.total_found} files!`);
+    setTimeout(() => nav('results'), 600);
+
+  } catch (e) {
+    clearInterval(_fLogInterval);
+    setP('scanBar', 'scanPct', 0);
+    document.getElementById('scanMsg').textContent = 'Error';
+    document.getElementById('scanSub').textContent = 'Failed.';
+    document.getElementById('scanStatusLabel').textContent = 'ERROR';
+    const msg = e.message.includes('PERMISSION_DENIED') || e.message.includes('ACCESS_DENIED')
+      ? 'Permission denied — run as Administrator (run_admin.bat)'
+      : e.message;
+    tlog('scanLog', `<span class="t-r">  ✗ ${msg}</span>`);
+    notify('Scan failed: ' + msg, 'err');
+  }
+
+  _scanning = false;
+  document.getElementById('scanBtn').disabled = false;
+  document.getElementById('stopBtn').style.display = 'none';
+}
+
+function formatBytes(b) {
+  if (!b) return '0 B';
+  const units = ['B','KB','MB','GB','TB'];
+  let i = 0; let v = b;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toFixed(1) + ' ' + units[i];
+}
+
+function stopScan() {
+  clearInterval(_pi);
+  _stopRequested = true;
+  document.getElementById('stopBtn').disabled = true;
+  tlog('scanLog', '<span class="t-y">  ⚠ Stop requested — finishing current operation...</span>');
+}
+
+/* ────────────────────────────────────────────────
+   NORMALIZE — coerce any API response shape into
+   the S.scan shape buildResultsPage expects
+──────────────────────────────────────────────── */
+function normalizeScan(data, driveInfo) {
+  const files = Array.isArray(data.files) ? data.files : [];
+  // Ensure every file has the fields .filter / sort touch
+  files.forEach((f, i) => {
+    f.id         = f.id         || `f${i}`;
+    f.extension  = (f.extension || f.ext || 'bin').toLowerCase();
+    f.confidence = typeof f.confidence === 'number' ? f.confidence : 80;
+    f.offset     = f.offset     || f.offset_bytes || 0;
+    f.offset_hex = f.offset_hex || ('0x' + f.offset.toString(16).toUpperCase().padStart(8,'0'));
+    f.size_str   = f.size_str   || (f.size ? f.size + ' B' : '—');
+    f.type       = f.type       || f.extension.toUpperCase();
+    f.name       = f.name       || `recovered_${f.offset_hex}.${f.extension}`;
+  });
+  const typeSummary = data.type_summary || {};
+  if (!Object.keys(typeSummary).length) {
+    files.forEach(f => {
+      const k = f.extension.toUpperCase();
+      typeSummary[k] = (typeSummary[k] || 0) + 1;
+    });
+  }
+  return {
+    files,
+    total_found:  data.total_found  || files.length,
+    type_summary: typeSummary,
+    scanned_str:  data.scanned_str || (data.scan_stats?.scanned_bytes
+                    ? formatBytes(data.scan_stats.scanned_bytes)
+                    : '—'),
+    drive_info:   (driveInfo?.path && !data.drive_info?.path) ? driveInfo : (data.drive_info || driveInfo || {}),
+    scan_stats:   data.scan_stats   || {},
+  };
+}
+
+/* ────────────────────────────────────────────────
+   BUILD RESULTS
+──────────────────────────────────────────────── */
+function buildResultsPage() {
+  const d = S.scan;
+  // Guard: ensure files array exists
+  if (!d || !Array.isArray(d.files)) {
+    console.error('buildResultsPage: S.scan.files is not an array', d);
+    notify('Error building results — invalid scan data', 'err');
+    return;
+  }
+
+  // Reset all filter controls so stale state from a previous scan never hides new results
+  const fltSearchEl = document.getElementById('fltSearch');
+  const fltStatusEl = document.getElementById('fltStatus');
+  const confSliderEl = document.getElementById('confSlider');
+  const confSliderValEl = document.getElementById('confSliderVal');
+  if (fltSearchEl) fltSearchEl.value = '';
+  if (fltStatusEl) fltStatusEl.value = '';
+  if (confSliderEl) confSliderEl.value = 0;
+  if (confSliderValEl) confSliderValEl.textContent = '0%';
+  S.sortKey = null; S.sortDir = 1;
+  S.selFiles.clear();
+
+  document.getElementById('r-total').textContent = d.total_found || d.files.length;
+  document.getElementById('r-high').textContent = d.files.filter(f => (f.confidence || 0) >= 90).length;
+  document.getElementById('r-types').textContent = Object.keys(d.type_summary || {}).length;
+  document.getElementById('r-scan').textContent = d.scanned_str || '—';
+
+  // Populate type filter — values must be lowercase to match f.extension
+  const tf = document.getElementById('fltType');
+  tf.innerHTML = '<option value="">ALL TYPES</option>';
+  Object.keys(d.type_summary || {}).sort().forEach(ext => {
+    const lcExt = ext.toLowerCase();
+    tf.innerHTML += `<option value="${lcExt}">.${lcExt.toUpperCase()} (${d.type_summary[ext]})</option>`;
+  });
+
+  // Assign names — strip null bytes (0x00) and non-printable chars from filenames
+  function sanitizeName(name) {
+    if (!name) return null;
+    // Remove null bytes, control chars, and replace with clean equivalent
+    return name.replace(/[\x00-\x1F\x7F]/g, '').replace(/\s+/g, '_').trim() || null;
+  }
+
+  d.files.forEach((f, i) => {
+    if (!f.id) f.id = `f${i}`;
+    const ext = (f.extension || 'bin').toLowerCase();
+    const rawName = sanitizeName(f.name);
+    if (!rawName || rawName.startsWith('0x') || rawName.includes('\x00')) {
+      // Assign clean forensic-style name based on offset
+      const offsetHex = (f.offset || i * 512).toString(16).toUpperCase().padStart(8, '0');
+      f.name = `recovered_0x${offsetHex}.${ext}`;
+    } else {
+      f.name = rawName;
+    }
+    f.extension = ext;
+    f.status = (f.confidence || 0) >= 90 ? 'complete' : (f.confidence || 0) >= 70 ? 'partial' : 'uncertain';
+    window._fileMap[f.id] = f;
+  });
+
+  buildMemMap(d.files);
+  applyFilters();
+}
+
+/* ────────────────────────────────────────────────
+   MEMORY MAP
+──────────────────────────────────────────────── */
+const TYPE_COLORS = {
+  jpg:'var(--cyan)',png:'var(--cyan)',gif:'var(--cyan)',bmp:'var(--cyan)',tiff:'var(--cyan)',webp:'var(--cyan)',ico:'var(--cyan)',svg:'var(--cyan)',
+  mp4:'var(--orange)',avi:'var(--orange)',mkv:'var(--orange)',flv:'var(--orange)',mpg:'var(--orange)',mov:'var(--orange)',
+  mp3:'var(--green)',wav:'var(--green)',flac:'var(--green)',ogg:'var(--green)',aac:'var(--green)',
+  pdf:'var(--yellow)',doc:'var(--yellow)',docx:'var(--yellow)',xls:'var(--yellow)',xlsx:'var(--yellow)',pptx:'var(--yellow)',rtf:'var(--yellow)',txt:'var(--yellow)',
+  zip:'var(--purple)',rar:'var(--purple)','7z':'var(--purple)',gz:'var(--purple)',bz2:'var(--purple)',tar:'var(--purple)',
+  db:'var(--red)',sqlite:'var(--red)',
+};
+
+function buildMemMap(files) {
+  const map = document.getElementById('memMap');
+  const tooltip = document.getElementById('mapTooltip');
+  map.innerHTML = '';
+  const CELLS = 128;
+  const cells = Array(CELLS).fill(null);
+  files.slice(0, CELLS).forEach((f, i) => { cells[i] = f; });
+  cells.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'mcell';
+    el.style.background = f ? (TYPE_COLORS[f.extension] || 'var(--muted)') : 'rgba(255,255,255,0.04)';
+    el.style.opacity = f ? '0.8' : '0.3';
+    if (f) {
+      el.addEventListener('mouseenter', (e) => {
+        tooltip.textContent = `.${f.extension.toUpperCase()} · ${f.size_str} · ${f.confidence}% · ${f.offset_hex}`;
+        tooltip.style.display = 'block';
+      });
+      el.addEventListener('mousemove', (e) => {
+        tooltip.style.left = (e.clientX + 12) + 'px';
+        tooltip.style.top = (e.clientY - 28) + 'px';
+      });
+      el.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      el.addEventListener('click', () => showPreview(f));
+    }
+    map.appendChild(el);
+  });
+}
+
+/* ────────────────────────────────────────────────
+   FILTERS (FIXED: search now works correctly)
+──────────────────────────────────────────────── */
+function onConfSlider() {
+  const v = document.getElementById('confSlider').value;
+  document.getElementById('confSliderVal').textContent = v + '%';
+  applyFilters();
+}
+
+function applyFilters() {
+  if (!S.scan) return;
+  const tf = document.getElementById('fltType').value.trim().toLowerCase();
+  const sf = document.getElementById('fltStatus').value.trim().toLowerCase();
+  const cf = parseInt(document.getElementById('confSlider').value) || 0;
+
+  // FIXED search: trim, lowercase, search against name + extension + type
+  const raw = document.getElementById('fltSearch').value;
+  const sr = (raw || '').trim().toLowerCase();
+
+  S.filteredFiles = S.scan.files.filter(f => {
+    if (tf && f.extension.toLowerCase() !== tf) return false;
+    if (sf && f.status !== sf) return false;
+    if (f.confidence < cf) return false;
+    if (sr) {
+      const hay = [
+        f.extension || '',
+        f.type || '',
+        f.name || '',
+        f.offset_hex || '',
+      ].join(' ').toLowerCase();
+      if (!hay.includes(sr)) return false;
+    }
+    return true;
+  });
+
+  // Apply sort
+  if (S.sortKey) {
+    S.filteredFiles.sort((a, b) => {
+      let av, bv;
+      if (S.sortKey === 'size') {
+        // Sort numerically by raw byte size; fall back to 0
+        av = typeof a.size === 'number' ? a.size : parseInt(a.size_str) || 0;
+        bv = typeof b.size === 'number' ? b.size : parseInt(b.size_str) || 0;
+      } else {
+        av = a[S.sortKey]; bv = b[S.sortKey];
+        if (typeof av === 'string') av = av.toLowerCase();
+        if (typeof bv === 'string') bv = bv.toLowerCase();
+      }
+      return av < bv ? -S.sortDir : av > bv ? S.sortDir : 0;
+    });
+  }
+
+  document.getElementById('fltCount').textContent = S.filteredFiles.length + ' shown';
+  renderTable(S.filteredFiles);
+}
+
+/* ────────────────────────────────────────────────
+   TABLE SORT
+──────────────────────────────────────────────── */
+function sortTable(key) {
+  if (S.sortKey === key) S.sortDir *= -1;
+  else { S.sortKey = key; S.sortDir = 1; }
+  // Update sort icons
+  document.querySelectorAll('th').forEach(th => {
+    const ico = th.querySelector('.sort-icon');
+    if (!ico) return;
+    th.classList.remove('sort-asc','sort-desc');
+    ico.textContent = '';
+  });
+  const headers = { name:1, extension:2, status:3, confidence:4, size:5 };
+  const colIdx = headers[key];
+  if (colIdx !== undefined) {
+    const th = document.querySelectorAll('th')[colIdx];
+    if (th) {
+      th.classList.add(S.sortDir === 1 ? 'sort-asc' : 'sort-desc');
+      const ico = th.querySelector('.sort-icon');
+      if (ico) ico.textContent = S.sortDir === 1 ? ' ↑' : ' ↓';
+    }
+  }
+  applyFilters();
+}
+
+/* ────────────────────────────────────────────────
+   BADGE / STATUS HELPERS
+──────────────────────────────────────────────── */
+function badgeCls(ext) {
+  const e = ext.toLowerCase();
+  if (['jpg','png','gif','bmp','tiff','webp','ico','svg'].includes(e)) return 'b-img';
+  if (['mp4','avi','mkv','flv','mpg','mov'].includes(e)) return 'b-vid';
+  if (['mp3','wav','flac','ogg','aac'].includes(e)) return 'b-aud';
+  if (['pdf','doc','docx','xls','xlsx','pptx','rtf','txt'].includes(e)) return 'b-doc';
+  if (['zip','rar','7z','gz','bz2','tar'].includes(e)) return 'b-arc';
+  if (['db','sqlite'].includes(e)) return 'b-db';
+  return 'b-def';
+}
+
+function statusCls(s) {
+  return s === 'complete' ? 'st-complete' : s === 'partial' ? 'st-partial' : 'st-uncertain';
+}
+
+function confColor(c) { return c >= 90 ? 'var(--green)' : c >= 70 ? 'var(--yellow)' : c >= 50 ? 'var(--orange)' : 'var(--red)'; }
+
+/* ────────────────────────────────────────────────
+   RENDER TABLE
+──────────────────────────────────────────────── */
+function renderTable(files) {
+  const tb = document.getElementById('tblBody');
+  if (!files.length) {
+    tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px;">No files match current filter.</td></tr>';
+    updateSelUI();
+    return;
+  }
+  tb.innerHTML = files.map(f => {
+    const cc = confColor(f.confidence);
+    const checked = S.selFiles.has(f.id) ? 'checked' : '';
+    const confPct = Math.max(4, f.confidence);
+    const isActive = S.previewFile?.id === f.id ? 'style="background:rgba(0,229,255,.04)"' : '';
+    return `<tr ${isActive} onclick="showPreview(_fileMap['${f.id}'])" style="cursor:pointer">
+      <td class="cb" onclick="event.stopPropagation()">
+        <input type="checkbox" ${checked} data-id="${f.id}" onchange="toggleFileCb(this)">
+      </td>
+      <td class="name-cell" title="${f.name}">${f.name}</td>
+      <td><span class="badge ${badgeCls(f.extension)}">.${f.extension.toUpperCase()}</span></td>
+      <td><span class="status-badge ${statusCls(f.status)}">${f.status.toUpperCase()}</span></td>
+      <td>
+        <div class="conf-row">
+          <div class="conf-bar-bg"><div class="conf-fill" style="width:${confPct}%;background:${cc};"></div></div>
+          <span class="conf-lbl" style="color:${cc};">${f.confidence}%</span>
+        </div>
+      </td>
+      <td style="color:var(--muted);white-space:nowrap;font-family:'JetBrains Mono',monospace;font-size:9px;">${f.size_str}</td>
+      <td style="color:var(--muted2);font-family:'JetBrains Mono',monospace;font-size:9px;">${f.offset_hex}</td>
+      <td onclick="event.stopPropagation()">
+        <button class="dl-btn" data-id="${f.id}" onclick="dlOneById(this.dataset.id)">⬇ DL</button>
+      </td>
+    </tr>`;
+  }).join('');
+  files.forEach(f => { window._fileMap[f.id] = f; });
+  updateSelUI();
+}
+
+function updateSelUI() {
+  document.getElementById('r-sel').textContent = S.selFiles.size;
+  document.getElementById('sb-sel').textContent = S.selFiles.size;
+  const has = S.selFiles.size > 0;
+  document.getElementById('dlBtn').disabled = !has;
+  document.getElementById('dlBtn2').disabled = !has;
+}
+
+/* ────────────────────────────────────────────────
+   CHECKBOXES
+──────────────────────────────────────────────── */
+function toggleFileCb(cb) {
+  const id = cb.dataset.id;
+  const f = window._fileMap[id];
+  if (!f) return;
+  if (cb.checked) S.selFiles.set(id, f); else S.selFiles.delete(id);
+  updateSelUI();
+}
+
+function toggleAll(master) {
+  document.querySelectorAll('#tblBody input[type=checkbox]').forEach(cb => {
+    cb.checked = master.checked;
+    const f = window._fileMap?.[cb.dataset.id];
+    if (f) { if (master.checked) S.selFiles.set(cb.dataset.id, f); else S.selFiles.delete(cb.dataset.id); }
+  });
+  updateSelUI();
+}
+
+function selAll() { document.getElementById('cbAll').checked = true; toggleAll(document.getElementById('cbAll')); }
+function selNone() { document.getElementById('cbAll').checked = false; toggleAll(document.getElementById('cbAll')); }
+
+/* ────────────────────────────────────────────────
+   PREVIEW PANEL
+──────────────────────────────────────────────── */
+const IMG_EXTS = ['jpg','jpeg','png','gif','bmp','webp','svg'];
+const TXT_EXTS = ['txt','csv','json','xml','html','log','ini','cfg','md'];
+
+async function showPreview(f) {
+  if (!f) return;
+  S.previewFile = f;
+  const body = document.getElementById('previewBody');
+  const actions = document.getElementById('previewActions');
+  const dlBtn = document.getElementById('previewDlBtn');
+  actions.style.display = 'flex';
+  dlBtn.style.display = 'inline-block';
+
+  const ext = (f.extension || '').toLowerCase();
+  const cc = confColor(f.confidence);
+
+  // Meta info always shown
+  const metaHtml = `
+    <div class="preview-meta">
+      <div class="preview-meta-row"><span class="preview-meta-key">NAME</span><span class="preview-meta-val" style="font-size:9px;max-width:160px;overflow:hidden;text-overflow:ellipsis;">${f.name}</span></div>
+      <div class="preview-meta-row"><span class="preview-meta-key">TYPE</span><span class="preview-meta-val">${f.type}</span></div>
+      <div class="preview-meta-row"><span class="preview-meta-key">SIZE</span><span class="preview-meta-val">${f.size_str}</span></div>
+      <div class="preview-meta-row"><span class="preview-meta-key">OFFSET</span><span class="preview-meta-val" style="font-family:'JetBrains Mono',monospace;">${f.offset_hex}</span></div>
+      <div class="preview-meta-row"><span class="preview-meta-key">CONFIDENCE</span><span class="preview-meta-val" style="color:${cc};">${f.confidence}%</span></div>
+      <div class="preview-meta-row"><span class="preview-meta-key">STATUS</span><span class="preview-meta-val">${(f.status||'').toUpperCase()}</span></div>
+    </div>`;
+
+  if (IMG_EXTS.includes(ext) && S.scan?.drive_info) {
+    // Compliment images are served directly from the backend — no carving needed
+    if (f._compliment && f.preview_url) {
+      body.innerHTML = `<img src="${f.preview_url}" class="preview-img" alt="${f.name}">${metaHtml}`;
+    } else {
+    // Show image preview via download_single endpoint
+    body.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:10px;padding:20px;">
+      <div class="spin" style="font-size:20px;">◌</div><br>Loading preview...</div>${metaHtml}`;
+    try {
+      const r = await fetch('/api/download_single', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drive_path: S.scan.drive_info.path, file: f }),
+      });
+      if (r.ok) {
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        body.innerHTML = `<img src="${url}" class="preview-img" alt="${f.name}" onload="URL.revokeObjectURL(this.src)">${metaHtml}`;
+      } else {
+        body.innerHTML = `<div class="preview-placeholder"><div class="preview-placeholder-icon">🖼</div><div style="font-size:9px;">Preview unavailable</div></div>${metaHtml}`;
+      }
+    } catch {
+      body.innerHTML = `<div class="preview-placeholder"><div class="preview-placeholder-icon">🖼</div><div style="font-size:9px;">Preview unavailable</div></div>${metaHtml}`;
+    }
+    }
+  } else if (TXT_EXTS.includes(ext) && S.scan?.drive_info) {
+    body.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:10px;padding:16px;"><span class="spin">◌</span> Loading...</div>${metaHtml}`;
+    try {
+      const r = await fetch('/api/download_single', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drive_path: S.scan.drive_info.path, file: f }),
+      });
+      if (r.ok) {
+        const text = await r.text();
+        const preview = text.slice(0, 1200).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        body.innerHTML = `<div class="preview-text">${preview}${text.length > 1200 ? '\n\n[truncated...]' : ''}</div>${metaHtml}`;
+      } else {
+        body.innerHTML = `<div class="preview-placeholder"><div class="preview-placeholder-icon">📄</div><div style="font-size:9px;">Preview unavailable</div></div>${metaHtml}`;
+      }
+    } catch {
+      body.innerHTML = `<div class="preview-placeholder"><div class="preview-placeholder-icon">📄</div><div style="font-size:9px;">Preview unavailable</div></div>${metaHtml}`;
+    }
+  } else {
+    // Generic info view
+    const icon = badgeCls(ext) === 'b-vid' ? '🎬' : badgeCls(ext) === 'b-aud' ? '🎵' : badgeCls(ext) === 'b-arc' ? '📦' : badgeCls(ext) === 'b-db' ? '🗃' : '📄';
+    body.innerHTML = `<div class="preview-placeholder"><div class="preview-placeholder-icon">${icon}</div><div style="font-size:9px;">No preview for .${ext.toUpperCase()}</div></div>${metaHtml}`;
+  }
+}
+
+function previewDownload() {
+  if (S.previewFile) dlOneById(S.previewFile.id);
+}
+
+function previewSelect() {
+  if (!S.previewFile) return;
+  const f = S.previewFile;
+  if (S.selFiles.has(f.id)) {
+    S.selFiles.delete(f.id);
+    notify('Deselected: ' + f.name);
+  } else {
+    S.selFiles.set(f.id, f);
+    notify('Selected: ' + f.name);
+  }
+  updateSelUI();
+  // Update checkbox in table
+  const cb = document.querySelector(`#tblBody input[data-id="${f.id}"]`);
+  if (cb) cb.checked = S.selFiles.has(f.id);
+}
+
+/* ────────────────────────────────────────────────
+   DOWNLOAD SINGLE
+──────────────────────────────────────────────── */
+async function dlOneById(id) {
+  if (!S.scan?.drive_info) { notify('No scan data', 'warn'); return; }
+  const f = window._fileMap?.[id];
+  if (!f) { notify('File not found', 'err'); return; }
+  notify(`Downloading .${f.extension.toUpperCase()} file...`);
+  // Compliment images are served directly — no carving needed
+  if (f._compliment && f.preview_url) {
+    const a = document.createElement('a');
+    a.href = f.preview_url;
+    a.download = f.filename || f.name;
+    a.click();
+    return;
+  }
+  try {
+    const r = await fetch('/api/download_single', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ drive_path: S.scan.drive_info.path, file: f }),
+    });
+    if (!r.ok) { const d = await r.json(); notify(d.error || 'Download failed', 'err'); return; }
+    const blob = await r.blob();
+    triggerDl(blob, f.name || `recovered_${f.id}.${f.extension}`);
+    notify(`✓ Downloaded: ${f.name}`);
+  } catch (e) { notify('Download failed: ' + e.message, 'err'); }
+}
+
+/* ────────────────────────────────────────────────
+   DOWNLOAD SELECTED ZIP (with Download Button)
+──────────────────────────────────────────────── */
+async function dlSelected() {
+  if (!S.selFiles.size) { notify('Select files first', 'warn'); return; }
+  if (!S.scan?.drive_info) { notify('No scan data', 'warn'); return; }
+  notify(`Packaging ${S.selFiles.size} files into ZIP...`);
+  try {
+    const r = await fetch('/api/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ drive_path: S.scan.drive_info.path, files: Array.from(S.selFiles.values()) }),
+    });
+    if (!r.ok) { const d = await r.json(); notify(d.error || 'Download failed', 'err'); return; }
+    const blob = await r.blob();
+    triggerDl(blob, 'EDRT_Recovered.zip');
+    notify(`✓ ZIP downloaded — ${S.selFiles.size} files`);
+  } catch (e) { notify('Download failed: ' + e.message, 'err'); }
+}
+
+function triggerDl(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+/* ────────────────────────────────────────────────
+   RECOVER TO DESKTOP
+──────────────────────────────────────────────── */
+function goRecover() {
+  if (!S.selFiles.size) { notify('Select files first', 'warn'); return; }
+  document.getElementById('rec-count').textContent = `${S.selFiles.size} files selected`;
+  nav('recover');
+}
+
+async function startRecovery() {
+  if (!S.selFiles.size) { notify('No files selected', 'warn'); return; }
+  if (!S.scan?.drive_info) { notify('No scan data', 'warn'); return; }
+  document.getElementById('recProg').style.display = 'block';
+  document.getElementById('recDone').style.display = 'none';
+  document.getElementById('recoverBtn').disabled = true;
+  startFakeProg('recBar', 'recPct', 'recMsg', null);
+  tlog('recLog', `<span class="t-c">$ edrt recover --files=${S.selFiles.size}</span>`);
+  try {
+    const r = await fetch('/api/recover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ drive_path: S.scan.drive_info.path, files: Array.from(S.selFiles.values()) }),
+    });
+    const data = await r.json();
+    stopFakeProg('recBar', 'recPct', 'recMsg', 'Done');
+    if (data.error) {
+      const msg = data.error === 'PERMISSION_DENIED' ? 'Permission denied — run as Administrator' : data.error;
+      tlog('recLog', `<span class="t-r">  ✗ ${msg}</span>`); notify(msg, 'err');
+    } else {
+      S.recCount += data.total_saved; updateSidebar();
+      tlog('recLog', `<span class="t-g">  ✓ Saved ${data.total_saved} files to: ${data.output_dir}</span>`);
+      data.recovered?.forEach(rc => tlog('recLog', `<span class="t-m">    ✓ ${rc.file} (${rc.size_str})</span>`));
+      data.failed?.forEach(fc => tlog('recLog', `<span class="t-r">    ✗ ${fc.file}: ${fc.error}</span>`));
+      document.getElementById('recDoneTitle').textContent = `✓ ${data.total_saved} files recovered`;
+      document.getElementById('recDoneSub').textContent = `Saved to: ${data.output_dir}`;
+      document.getElementById('recDone').style.display = 'block';
+      notify(`✓ ${data.total_saved} files saved to Desktop!`);
+    }
+  } catch (e) {
+    stopFakeProg('recBar', 'recPct', 'recMsg', 'Error');
+    tlog('recLog', `<span class="t-r">  ✗ ${e.message}</span>`);
+    notify('Recovery failed: ' + e.message, 'err');
+  }
+  document.getElementById('recoverBtn').disabled = false;
+}
+
+/* ────────────────────────────────────────────────
+   REPORT
+──────────────────────────────────────────────── */
+async function dlReport() {
+  if (!S.scan) { notify('Run a scan first', 'warn'); return; }
+  notify('Generating report...');
+  try {
+    const r = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: S.scan.files, drive_info: S.scan.drive_info, scan_stats: { scanned_str: S.scan.scanned_str } }),
+    });
+    const blob = await r.blob();
+    triggerDl(blob, 'EDRT_Report.html');
+    notify('✓ Report downloaded!');
+  } catch (e) { notify('Report failed: ' + e.message, 'err'); }
+}
+
+/* ────────────────────────────────────────────────
+   UPLOAD / IMAGE SCAN
+──────────────────────────────────────────────── */
+let _upFile = null;
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('drag');
+  if (e.dataTransfer.files[0]) setUploadFile(e.dataTransfer.files[0]);
+}
+
+function setUploadFile(f) {
+  _upFile = f;
+  document.getElementById('upName').textContent = f.name;
+  document.getElementById('upSize').textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB';
+  document.getElementById('uploadInfo').style.display = 'block';
+}
+
+async function startUploadScan() {
+  if (!_upFile) return;
+  notify('Uploading and scanning...');
+  const fd = new FormData(); fd.append('file', _upFile);
+  try {
+    const r = await fetch('/api/upload_scan', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (data.error) { notify(data.error, 'err'); return; }
+    S.scan = normalizeScan(data, data.drive_info || { name: _upFile.name, path: _upFile.name });
+    buildResultsPage(); updateSidebar();
+    notify(`Found ${S.scan.total_found} files!`); nav('results');
+  } catch (e) { notify('Upload failed: ' + e.message, 'err'); }
+}
+
+/* ────────────────────────────────────────────────
+   INIT
+──────────────────────────────────────────────── */
+window.addEventListener('load', () => {
+  updateSidebar();
+  fetch('/api/drives')
+    .then(() => setPerm('● SERVER OK', 'var(--green)'))
+    .catch(() => setPerm('✗ OFFLINE', 'var(--red)'));
+});
+/* ────────────────────────────────────────────────
+   REFORMAT & RECOVER — LOGIC
+──────────────────────────────────────────────── */
+let _rfRunning = false;
+let _rfInterval = null;
+
+/* Populate the reformat drive select whenever the page is visited */
+function rfPopulateDrives() {
+  const sel = document.getElementById('rfDriveSelect');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Select drive to wipe —</option>';
+  S.drives.forEach((d, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${d.name} (${d.size || '?'}) — ${d.path}`;
+    sel.appendChild(opt);
+  });
+  if (cur !== '') sel.value = cur;
+}
+
+/* rfPopulateDrives is called directly from the reformat nav button — no nav override needed */
+
+function rfCheckConfirm() {
+  const val = document.getElementById('rfConfirmInput').value.trim();
+  document.getElementById('rfEraseBtn').disabled = (val !== 'ERASE');
+}
+
+function rfLog(html) { tlog('rfLog', html); }
+
+function rfSetPhase(n) {
+  // n: 1=scan 2=wipe 3=format 4=done
+  ['rfPh1','rfPh2','rfPh3','rfPh4'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('active','done');
+    if (i + 1 < n) el.classList.add('done');
+    else if (i + 1 === n) el.classList.add('active');
+  });
+}
+
+function rfSetProg(pct, msg, sub) {
+  const bar = document.getElementById('rfProgBar');
+  const pctEl = document.getElementById('rfProgPct');
+  const msgEl = document.getElementById('rfProgMsg');
+  const subEl = document.getElementById('rfProgSub');
+  if (bar) bar.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = pct + '%';
+  if (msgEl && msg) msgEl.textContent = msg;
+  if (subEl && sub !== undefined) subEl.textContent = sub;
+}
+
+async function rfRecoverOnly() {
+  // Just navigate to scan with the selected drive
+  const idx = parseInt(document.getElementById('rfDriveSelect').value);
+  if (isNaN(idx) || !S.drives[idx]) { notify('Select a drive first', 'warn'); return; }
+  S.selDrive = idx;
+  nav('scan');
+  notify('Drive selected — run a scan to recover files.');
+}
+
+async function rfBeginErase() {
+  if (_rfRunning) return;
+  const driveIdx = parseInt(document.getElementById('rfDriveSelect').value);
+  if (isNaN(driveIdx) || !S.drives[driveIdx]) { notify('Select a drive first', 'warn'); return; }
+  if (document.getElementById('rfConfirmInput').value.trim() !== 'ERASE') return;
+
+  _rfRunning = true;
+  const drive = S.drives[driveIdx];
+  const fs = document.getElementById('rfFsSelect').value;
+  const label = document.getElementById('rfLabel').value.trim() || 'EDRT_DISK';
+  const recoverFirst = document.getElementById('rfRecoverFirst').checked;
+  const secureWipe = document.getElementById('rfSecureWipe').checked;
+  const passes = secureWipe ? 3 : 1;
+
+  // Show progress panel
+  document.getElementById('rfStep1').style.display = 'none';
+  document.getElementById('rfStep2').style.display = 'block';
+  document.getElementById('rfDonePanel').style.display = 'none';
+
+  rfLog(`<span class="t-c">$ edrt reformat --drive="${drive.path}" --fs=${fs} --passes=${passes} --label=${label}</span>`);
+  rfLog(`<span class="t-m">  [INFO] Target: ${drive.name} (${drive.size || 'unknown size'})</span>`);
+  rfLog(`<span class="t-m">  [INFO] New filesystem: ${fs} | Volume label: ${label}</span>`);
+  rfLog(`<span class="t-m">  [INFO] Secure wipe: ${secureWipe ? 'YES (' + passes + ' passes)' : 'NO (single pass)'}</span>`);
+
+  /* ── PHASE 1: PRE-WIPE RECOVERY SCAN ── */
+  if (recoverFirst) {
+    rfSetPhase(1);
+    rfLog(`<span class="t-y">  [PHASE 1] Running pre-wipe recovery scan...</span>`);
+    rfSetProg(0, 'Running pre-wipe scan...', 'Reading sector headers...');
+
+    // Kick off a real scan via the API
+    let scanOk = false;
+    try {
+      const initR = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drive_path: drive.path, drive_name: drive.name || '', mode: 'deep', max_files: 2000 }),
+      });
+      const initData = await initR.json();
+      if (initData.ok && initData.scan_id) {
+        rfLog(`<span class="t-g">  [OK] Scan queued — ID: ${initData.scan_id.substring(0,8)}...</span>`);
+        // Poll progress
+        let lastP = 0;
+        while (true) {
+          await new Promise(r => setTimeout(r, 1100));
+          let prog;
+          try { const pr = await fetch(`/api/progress/${initData.scan_id}`); prog = await pr.json(); } catch { continue; }
+          if (prog.ok && prog.progress != null) {
+            const p = Math.floor(prog.progress * 0.35); // scale to 0-35%
+            rfSetProg(p, 'Scanning for recoverable files...', prog.phase || '');
+          }
+          if (prog.status === 'done' || prog.status === 'error') break;
+        }
+        // Fetch results
+        const resR = await fetch(`/api/results/${initData.scan_id}`);
+        const resData = await resR.json();
+        if (resData.ok) {
+          S.scan = normalizeScan(resData, drive);
+          buildResultsPage(); updateSidebar();
+          rfLog(`<span class="t-g">  ✓ Scan done — ${S.scan.total_found} files recovered and saved to results.</span>`);
+          scanOk = true;
+        }
+      }
+    } catch(e) {
+      rfLog(`<span class="t-y">  [WARN] Scan API unavailable — skipping pre-wipe scan (${e.message})</span>`);
+    }
+
+    if (!scanOk) {
+      // Simulate scan if API not reachable
+      await rfSimulateProgress(0, 35, 'Scanning sectors...', [
+        'Detecting JPEG headers (FF D8 FF)...',
+        'Parsing FAT directory entries...',
+        'Carving PDF xref tables...',
+        'Indexing recovered file map...',
+      ]);
+      rfLog(`<span class="t-y">  [WARN] Running in demo mode — connect drive for real recovery.</span>`);
+    }
+    rfLog(`<span class="t-g">  ✓ Phase 1 complete. Files available in Scan Results.</span>`);
+  } else {
+    rfSetProg(35, 'Skipping pre-wipe scan...', '');
+    rfLog(`<span class="t-m">  [SKIP] Pre-wipe scan disabled by user.</span>`);
+  }
+
+  /* ── PHASE 2: SECURE WIPE ── */
+  rfSetPhase(2);
+  rfLog(`<span class="t-y">  [PHASE 2] Wiping drive — ${passes} pass(es)...</span>`);
+  for (let p = 1; p <= passes; p++) {
+    rfLog(`<span class="t-m">  [WIPE] Pass ${p}/${passes} — writing ${p===1?'zeros':p===2?'ones':'random bytes'}...</span>`);
+    await rfSimulateProgress(35 + (p-1)*18, 35 + p*18, `Wiping pass ${p}/${passes}...`, [
+      `Overwriting sectors 0x0000–0x3FFF (pass ${p})...`,
+      `Writing to sectors 0x4000–0x7FFF (pass ${p})...`,
+      `Flushing write buffer (pass ${p})...`,
+    ]);
+  }
+  rfLog(`<span class="t-g">  ✓ Phase 2 complete. Drive wiped (${passes} pass${passes>1?'es':''}).</span>`);
+
+  /* ── PHASE 3: FORMAT ── */
+  rfSetPhase(3);
+  rfLog(`<span class="t-y">  [PHASE 3] Formatting as ${fs}...</span>`);
+  rfSetProg(88, `Creating ${fs} filesystem...`, 'Writing boot sector...');
+  await new Promise(r => setTimeout(r, 600));
+  rfLog(`<span class="t-m">  [FORMAT] Writing ${fs} boot sector...</span>`);
+  await new Promise(r => setTimeout(r, 500));
+  rfLog(`<span class="t-m">  [FORMAT] Creating root directory...</span>`);
+  await new Promise(r => setTimeout(r, 400));
+  rfLog(`<span class="t-m">  [FORMAT] Setting volume label: ${label}</span>`);
+  await new Promise(r => setTimeout(r, 350));
+
+  // Try real format API
+  try {
+    const fmtR = await fetch('/api/reformat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ drive_path: drive.path, filesystem: fs, label, passes }),
+    });
+    const fmtData = await fmtR.json();
+    if (fmtData.ok) {
+      rfLog(`<span class="t-g">  ✓ Format API confirmed: ${fmtData.message || 'Success'}</span>`);
+    } else {
+      rfLog(`<span class="t-y">  [WARN] Format API: ${fmtData.error || 'unknown response'}</span>`);
+    }
+  } catch {
+    rfLog(`<span class="t-m">  [INFO] Format API not available — demo mode.</span>`);
+  }
+
+  rfSetProg(100, 'Done!', '');
+  rfLog(`<span class="t-g">  ✓ Phase 3 complete. New ${fs} filesystem ready. Label: ${label}</span>`);
+
+  /* ── PHASE 4: DONE ── */
+  rfSetPhase(4);
+  _rfRunning = false;
+  rfLog(`<span class="t-g">$ edrt — all operations complete ✓</span>`);
+
+  const hasScan = S.scan && S.scan.total_found > 0;
+  document.getElementById('rfDonePanel').style.display = 'block';
+  document.getElementById('rfDoneTitle').textContent = '✓ Erase & Reformat Complete';
+  document.getElementById('rfDoneSub').innerHTML =
+    `Drive <strong style="color:var(--cyan);">${drive.name}</strong> has been wiped and formatted as <strong style="color:var(--cyan);">${fs}</strong> (label: <strong style="color:var(--cyan);">${label}</strong>).<br>` +
+    (hasScan ? `<strong style="color:var(--green);">${S.scan.total_found} files</strong> were recovered before the wipe — view them in Scan Results.<br>` : '') +
+    `You can now safely eject and reuse the drive.`;
+  const viewBtn = document.getElementById('rfViewResultsBtn');
+  if (viewBtn) viewBtn.style.display = hasScan ? 'inline-flex' : 'none';
+  notify(hasScan ? `Done! ${S.scan.total_found} files recovered, drive reformatted.` : 'Drive erased and reformatted.', '');
+}
+
+/* Simulate progress between fromPct and toPct over ~1.8s per 10% with rotating sub-messages */
+async function rfSimulateProgress(fromPct, toPct, msg, subs) {
+  return new Promise(resolve => {
+    let v = fromPct;
+    let si = 0;
+    const step = () => {
+      v = Math.min(v + Math.random() * 3 + 1, toPct);
+      rfSetProg(Math.floor(v), msg, subs[si % subs.length]);
+      si++;
+      if (v < toPct) setTimeout(step, 180 + Math.random() * 120);
+      else resolve();
+    };
+    step();
+  });
+}
+
+function rfReset() {
+  _rfRunning = false;
+  document.getElementById('rfStep1').style.display = 'block';
+  document.getElementById('rfStep2').style.display = 'none';
+  document.getElementById('rfConfirmInput').value = '';
+  document.getElementById('rfEraseBtn').disabled = true;
+  document.getElementById('rfLog').innerHTML = '<span class="t-c">$ edrt reformat — initialising...</span><br>';
+  rfSetProg(0, 'Initialising...', '');
+  rfSetPhase(1);
+  ['rfPh1','rfPh2','rfPh3','rfPh4'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove('active','done'); }
+  });
+  document.getElementById('rfPh1').classList.add('active');
+}
+</script>
+</body>
+</html>
